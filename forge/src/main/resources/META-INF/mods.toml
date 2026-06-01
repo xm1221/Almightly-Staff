@@ -1,0 +1,43 @@
+modLoader = "javafml"
+loaderVersion = "[47,)"
+#issueTrackerURL = ""
+license = "MIT"
+
+[[mods]]
+modId = "almightly_staff"
+version = "${version}"
+displayName = "Almightly Staff"
+authors = "xm1221"
+description = '''
+
+'''
+#logoFile = ""
+
+[[dependencies.almightly_staff]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.almightly_staff]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.almightly_staff]]
+modId = "architectury"
+mandatory = true
+versionRange = "[9.2.14,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.almightly_staff]]
+modId = "hexcasting"
+mandatory = true
+versionRange = "[0.0.0,)"
+ordering = "AFTER"
+side = "BOTH"
+

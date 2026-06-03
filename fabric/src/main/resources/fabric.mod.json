@@ -11,14 +11,14 @@
 
   },
   "license": "MIT",
-  "icon": "assets/hex_monitor/icon.png",
+  "icon": "assets/almightly_staff/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "cn.xm1221.HexMonitor.fabric.AlmightlyStaffModFabric"
+      "cn.xm1221.AlmightlyStaff.fabric.AlmightlyStaffModFabric"
     ],
     "client": [
-      "cn.xm1221.HexMonitor.fabric.client.AlmightlyStaffModFabricClient"
+      "cn.xm1221.AlmightlyStaff.fabric.client.AlmightlyStaffModFabricClient"
     ]
   },
   "mixins": [

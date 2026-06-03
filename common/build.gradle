@@ -1,5 +1,5 @@
 plugins {
-    //id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.kotlin.jvm' version '1.9.22'
 }
 repositories {
     maven {
@@ -26,9 +26,9 @@ dependencies {
     modApi "me.shedaniel.cloth:cloth-config:${rootProject.cloth_config_version}"
     //compileOnly "vazkii.patchouli:Patchouli-xplat:$minecraft_version-$patchouli_version-SNAPSHOT"
     compileOnly ("maven.modrinth:patchouli:${minecraft_version}-${patchouli_version}-forge")
-    //compileOnly "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    compileOnly "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
 }
-/*compileKotlin {
+compileKotlin {
     kotlinOptions {
         jvmTarget = "17"
     }
@@ -37,4 +37,4 @@ compileTestKotlin {
     kotlinOptions {
         jvmTarget = "17"
     }
-}*/
+}

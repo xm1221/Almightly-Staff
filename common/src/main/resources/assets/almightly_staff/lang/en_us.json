@@ -8,5 +8,10 @@
   "hex_monitor.advice.monitor/set": "By projecting a sliver of your soul into an entity within the same dimension, you may share that entity's vision. Only scrolls, allays, hex casters, and certain ethereal entities can serve as targets. Targeting yourself restores your normal sight. Consumes 5 amethyst dust. Curiously, when viewing through another caster's eyes, you cannot see your own body.",
   "hex_monitor.advice.monitor/get": "Obtains the entity into which the target player has projected their soul. If the target is viewing through their own body, the wrath of consciousness will be incurred.",
   "hex_monitor.advice.monitor/def": "Accepts an entity and returns the player iota of the one whose consciousness is invested within it.",
-  "hex_monitor.chat.looking": "You feel a sudden chill for no apparent reason..."
+  "hex_monitor.chat.looking": "You feel a sudden chill for no apparent reason...",
+  "item.almightly_staff.all_in_one": "Almightly Staff",
+  "almightly_staff.mode.on": "Staff Mode: §aSpell Casting",
+  "almightly_staff.mode.off": "Staff Mode: §cHex Writing",
+  "key.almightly_staff.mode": "Toggle Staff Mode",
+  "key.categories.almightly_staff": "Almightly Staff"
 }

@@ -1,16 +1,32 @@
 package cn.xm1221.AlmightlyStaff.network;
 
+import at.petrak.hexcasting.api.casting.ParticleSpray;
+import at.petrak.hexcasting.api.casting.eval.env.PackagedItemCastEnv;
+import at.petrak.hexcasting.api.casting.eval.vm.CastingVM;
+import at.petrak.hexcasting.api.casting.iota.Iota;
+import at.petrak.hexcasting.api.casting.iota.PatternIota;
+import at.petrak.hexcasting.common.msgs.MsgNewSpiralPatternsS2C;
+import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import dev.architectury.networking.NetworkChannel;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.stats.Stat;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
 
 /**
  * 统一管理 Almightly Staff mod 的所有网络消息。
@@ -114,7 +130,7 @@ public class ModNetworking {
         }
     }
 
-    // ==================== 模式切换消息 ====================
+
 
     public record MsgAlmightlyStaffModeC2S() {
         public static void encode(MsgAlmightlyStaffModeC2S msg, FriendlyByteBuf buf) {
@@ -133,14 +149,8 @@ public class ModNetworking {
 
             ctx.queue(() -> {
                 var stack = sender.getMainHandItem();
-                if (stack.getItem() instanceof ItemAlmightlyStaff staff) {
-                    staff.changesMode(stack);
-                    var mode = ItemAlmightlyStaff.isModeActive(stack);
-                    sender.displayClientMessage(
-                        Component.translatable("almightly_staff.mode." + (mode ? "on" : "off"))
-                            .withStyle(mode ? ChatFormatting.GREEN : ChatFormatting.RED),
-                        true);
-                }
+                var item = stack.getItem();
+                if (item instanceof ItemAlmightlyStaff) ((ItemAlmightlyStaff) item).casting(sender.level(), sender, InteractionHand.MAIN_HAND);
             });
         }
     }

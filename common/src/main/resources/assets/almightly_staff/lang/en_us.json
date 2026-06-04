@@ -10,8 +10,6 @@
   "hex_monitor.advice.monitor/def": "Accepts an entity and returns the player iota of the one whose consciousness is invested within it.",
   "hex_monitor.chat.looking": "You feel a sudden chill for no apparent reason...",
   "item.almightly_staff.all_in_one": "Almightly Staff",
-  "almightly_staff.mode.on": "Staff Mode: §aSpell Casting",
-  "almightly_staff.mode.off": "Staff Mode: §cHex Writing",
-  "key.almightly_staff.mode": "Toggle Staff Mode",
+  "key.almightly_staff.mode": "Almightly Staff Casting",
   "key.categories.almightly_staff": "Almightly Staff"
 }

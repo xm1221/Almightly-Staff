@@ -10,8 +10,6 @@
   "hex_monitor.advice.monitor/def": "接受一个实体，获取将意识投入其间的玩家实体Iota。",
   "hex_monitor.chat.looking": "莫名觉得有点冷啊......",
   "item.almightly_staff.all_in_one": "万法之杖",
-  "almightly_staff.mode.on": "法杖模式：§a施法",
-  "almightly_staff.mode.off": "法杖模式：§c编辑",
-  "key.almightly_staff.mode": "切换法杖模式",
+  "key.almightly_staff.mode": "万法之杖执行",
   "key.categories.almightly_staff": "万法之杖"
 }

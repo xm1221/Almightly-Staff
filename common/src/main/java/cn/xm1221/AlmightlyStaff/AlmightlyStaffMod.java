@@ -15,7 +15,7 @@ public final class AlmightlyStaffMod {
         // Write common init code here.
         AlmightlyStaffActions.init();
         ModNetworking.init();
-        Registry.register(BuiltInRegistries.ITEM, ResourceLocation.tryBuild(MOD_ID,"all_in_one"),new ItemAlmightlyStaff(new Item.Properties().rarity(Rarity.UNCOMMON)));
+        Registry.register(BuiltInRegistries.ITEM, ResourceLocation.tryBuild(MOD_ID,"all_in_one"),new ItemAlmightlyStaff(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1)));
 
     }
 }

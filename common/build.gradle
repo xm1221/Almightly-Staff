@@ -9,6 +9,15 @@ repositories {
         name = "Modrinth"
         url = "https://api.modrinth.com/maven"
     }
+    maven { url = "https://api.modrinth.com/maven" }
+    maven { url = "https://maven.hexxy.media" }
+    maven { url = "https://maven.blamejared.com/" }
+    maven { url = "https://maven.jamieswhiteshirt.com/libs-release/" }
+    maven { url = "https://maven.kosmx.dev/" }
+    maven { url = "https://maven.shedaniel.me/" }
+    maven { url = "https://maven.terraformersmc.com/releases" }
+    maven { url = "https://maven.ladysnake.org/releases" }
+    maven { url = "https://mvn.devos.one/snapshots/" }
     mavenCentral()
 }
 
@@ -24,9 +33,10 @@ dependencies {
     modImplementation "dev.architectury:architectury:$rootProject.architectury_api_version"
     modImplementation "at.petra-k.hexcasting:hexcasting-common-1.20.1:$rootProject.hexcasting_version"
     modApi "me.shedaniel.cloth:cloth-config:${rootProject.cloth_config_version}"
-    //compileOnly "vazkii.patchouli:Patchouli-xplat:$minecraft_version-$patchouli_version-SNAPSHOT"
+    compileOnly "vazkii.patchouli:Patchouli-xplat:$minecraft_version-$patchouli_version-SNAPSHOT"
     compileOnly ("maven.modrinth:patchouli:${minecraft_version}-${patchouli_version}-forge")
     compileOnly "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    modImplementation fileTree(dir: "libs", include: '*.jar')
 }
 compileKotlin {
     kotlinOptions {

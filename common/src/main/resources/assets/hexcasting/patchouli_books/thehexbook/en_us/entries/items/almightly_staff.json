@@ -1,0 +1,21 @@
+{
+  "name": "hexcasting.entry.almightly_staff",
+  "icon": "almightly_staff:all_in_one",
+  "category": "hexcasting:items",
+  "sortnum": 10,
+  "pages": [
+    {
+      "type": "patchouli:text",
+      "text": "hexcasting.page.almightly_staff.1"
+    },
+    {
+      "type": "patchouli:text",
+      "text": "hexcasting.page.almightly_staff.2"
+    },
+    {
+      "type": "patchouli:crafting",
+      "recipe": "almightly_staff:all_in_one",
+      "text": "hexcasting.page.almightly_staff.crafting.desc"
+    }
+  ]
+}

@@ -26,6 +26,8 @@ architectury {
 }
 
 dependencies {
+    //implementation 'androidx.media3:media3-session:1.10.1'
+
     // We depend on Fabric Loader here to use the Fabric @Environment annotations,
     // which get remapped to the correct annotations on each platform.
     // Do NOT use other classes from Fabric Loader.

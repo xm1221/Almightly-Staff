@@ -9,10 +9,14 @@ import at.petrak.hexcasting.api.casting.iota.Iota;
 import at.petrak.hexcasting.api.casting.iota.ListIota;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
 import at.petrak.hexcasting.api.item.HexHolderItem;
+import at.petrak.hexcasting.api.item.MediaHolderItem;
+import at.petrak.hexcasting.api.misc.MediaConstants;
 import at.petrak.hexcasting.api.mod.HexConfig;
 import at.petrak.hexcasting.api.pigment.FrozenPigment;
+import at.petrak.hexcasting.api.utils.MediaHelper;
 import at.petrak.hexcasting.api.utils.NBTHelper;
 import at.petrak.hexcasting.common.items.HexBaubleItem;
+import at.petrak.hexcasting.common.items.magic.ItemMediaBattery;
 import at.petrak.hexcasting.common.items.storage.ItemSpellbook;
 import at.petrak.hexcasting.common.lib.HexAttributes;
 import at.petrak.hexcasting.common.lib.HexItems;
@@ -24,18 +28,25 @@ import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.animal.allay.Allay;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -44,20 +55,35 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import static at.petrak.hexcasting.api.utils.NBTHelper.getList;
 import static at.petrak.hexcasting.common.items.ItemLens.GRID_ZOOM;
 import static at.petrak.hexcasting.common.items.ItemLens.SCRY_SIGHT;
+import static at.petrak.hexcasting.common.items.magic.ItemMediaHolder.HEX_COLOR;
 
 
-public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, HexBaubleItem {
+public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, HexBaubleItem, MediaHolderItem {
 
 
     public ItemAlmightlyStaff(Properties properties) {
         super(properties);
     }
+
+
+    private static final DecimalFormat PERCENTAGE = new DecimalFormat("####");
+
+    static {
+        PERCENTAGE.setRoundingMode(RoundingMode.DOWN);
+    }
+
+    private static final DecimalFormat DUST_AMOUNT = new DecimalFormat("###,###.##");
+
+    public static final String BAR_COLOR="bar_color";
 
 
     @Override
@@ -233,5 +259,81 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         out.put(HexAttributes.SCRY_SIGHT, SCRY_SIGHT);
         return out;
     }
+
+    @Override
+    public void appendHoverText(ItemStack pStack, @Nullable Level pLevel, List<Component> pTooltipComponents,
+                                TooltipFlag pIsAdvanced) {
+        var maxMedia = getMaxMedia(pStack);
+        if (maxMedia > 0) {
+            var media = getMedia(pStack);
+            var fullness = getMediaFullness(pStack);
+
+            var color = TextColor.fromRgb(MediaHelper.mediaBarColor(media, maxMedia));
+
+            var mediamount = Component.literal(DUST_AMOUNT.format(media / (float) MediaConstants.DUST_UNIT));
+            var percentFull = Component.literal(PERCENTAGE.format(100f * fullness) + "%");
+            var maxCapacity = Component.translatable("hexcasting.tooltip.media", DUST_AMOUNT.format(maxMedia / (float) MediaConstants.DUST_UNIT));
+
+            mediamount.withStyle(style -> style.withColor(HEX_COLOR));
+            maxCapacity.withStyle(style -> style.withColor(HEX_COLOR));
+            percentFull.withStyle(style -> style.withColor(color));
+
+            pTooltipComponents.add(
+                    Component.translatable("hexcasting.tooltip.media_amount.advanced",
+                            mediamount, maxCapacity, percentFull));
+        }
+        super.appendHoverText(pStack, pLevel, pTooltipComponents, pIsAdvanced);
+    }
+
+    @Override
+    public void inventoryTick(ItemStack itemStack, Level level, Entity entity, int i, boolean bl) {
+        if(entity instanceof Allay ||entity instanceof ServerPlayer) {
+            var media=getMedia(itemStack);
+            if(media<=getMaxMedia(itemStack) && level.getGameTime()%13==0) {
+                addMedia(itemStack, (long) (media+MediaConstants.DUST_UNIT));
+            }
+        }
+    }
+
+    public void addMedia(ItemStack itemStack, long media) {
+        if(media<=getMaxMedia(itemStack)) {
+            NBTHelper.putLong(itemStack, "media", media);
+        }
+    }
+
+    @Override
+    public boolean isBarVisible(ItemStack itemStack) {
+        return getMaxMedia(itemStack) > 0;
+    }
+
+    @Override
+    public int getBarColor(ItemStack itemStack) {
+        if (itemStack.getTag() != null && (!itemStack.hasTag() || !itemStack.getTag().contains(BAR_COLOR))) {
+            return 0xb38ef3;
+        }
+        return NBTHelper.getInt(itemStack, BAR_COLOR);
+    }
+
+    public void setBarColor(ItemStack itemStack, int color) {
+        NBTHelper.putInt(itemStack, BAR_COLOR, color);
+    }
+
+    @Override
+    public int getBarWidth(ItemStack pStack) {
+        var media = getMedia(pStack);
+        var maxMedia = getMaxMedia(pStack);
+        return MediaHelper.mediaBarWidth(media, maxMedia);
+    }
+
+    @Override
+    public void onCraftedBy(ItemStack itemStack, Level level, Player player) {
+        if(level.isClientSide) {
+            return;
+        }
+        var color=new StaffCastEnv((ServerPlayer) player,InteractionHand.MAIN_HAND).getPigment().getColorProvider().getColor(level.getGameTime(),player.position());
+        setBarColor(itemStack, color);
+        NBTHelper.putLong(itemStack, "max_media", 64*MediaConstants.CRYSTAL_UNIT);
+    }
+
 
 }

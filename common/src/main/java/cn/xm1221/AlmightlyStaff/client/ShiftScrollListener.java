@@ -63,7 +63,6 @@ public class ShiftScrollListener {
     }
 
     private static boolean IsScrollableItem(Item item) {
-        return item == HexItems.SPELLBOOK || item == HexItems.ABACUS
-            || item instanceof ItemAlmightlyStaff;
+        return item instanceof ItemAlmightlyStaff;
     }
 }

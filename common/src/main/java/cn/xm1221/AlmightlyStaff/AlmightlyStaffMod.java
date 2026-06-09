@@ -11,11 +11,15 @@ import net.minecraft.world.item.Rarity;
 public final class AlmightlyStaffMod {
     public static final String MOD_ID = "almightly_staff";
 
+    public static final Item ALL_IN_ONE = new ItemAlmightlyStaff(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1));
+
     public static void init() {
         // Write common init code here.
         AlmightlyStaffActions.init();
         ModNetworking.init();
-        Registry.register(BuiltInRegistries.ITEM, ResourceLocation.tryBuild(MOD_ID,"all_in_one"),new ItemAlmightlyStaff(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1)));
 
+    }
+    public static void FabricInit() {
+        Registry.register(BuiltInRegistries.ITEM, ResourceLocation.tryBuild(AlmightlyStaffMod.MOD_ID,"all_in_one"),AlmightlyStaffMod.ALL_IN_ONE);
     }
 }

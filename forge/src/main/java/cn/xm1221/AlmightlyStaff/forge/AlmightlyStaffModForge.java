@@ -1,14 +1,18 @@
 package cn.xm1221.AlmightlyStaff.forge;
 
-import at.petrak.hexcasting.forge.ForgeHexClientInitializer;
+import at.petrak.hexcasting.common.lib.HexCreativeTabs;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
+import cn.xm1221.AlmightlyStaff.items.AlmightlyStaffItems;
 import dev.architectury.platform.forge.EventBuses;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegisterEvent;
 
 import static dev.architectury.platform.forge.EventBuses.getModEventBus;
@@ -19,8 +23,21 @@ public final class AlmightlyStaffModForge {
         // Submit our event bus to let Architectury API register our content on the right time.
         EventBuses.registerModEventBus(AlmightlyStaffMod.MOD_ID, context.getModEventBus());
         // Run our common setup.
-        context.getModEventBus().addListener((RegisterEvent event) -> {
+        context.getModEventBus().addListener((RegisterEvent event) ->{
+            if (event.getRegistryKey().equals(ForgeRegistries.Keys.ITEMS)) {
+                event.register(ForgeRegistries.Keys.ITEMS, helper -> {
+                    helper.register(
+                            ResourceLocation.tryBuild(AlmightlyStaffMod.MOD_ID, "all_in_one"),
+                            AlmightlyStaffMod.ALL_IN_ONE
+                    );
+                });
+            }
             AlmightlyStaffMod.init();
+        });
+        context.getModEventBus().addListener((BuildCreativeModeTabContentsEvent event) -> {
+            if (event.getTab() == HexCreativeTabs.HEX) {
+                event.accept(AlmightlyStaffItems.getStaff());
+            }
         });
 
         var modBus = getModEventBus(AlmightlyStaffMod.MOD_ID);

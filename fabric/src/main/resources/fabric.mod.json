@@ -3,12 +3,11 @@
   "id": "almightly_staff",
   "version": "${version}",
   "name": "Almightly Staff",
-  "description": "",
+  "description": "The grand unification of all hex-casting tools.",
   "authors": [
     "xm1221"
   ],
   "contact": {
-
   },
   "license": "MIT",
   "icon": "assets/almightly_staff/icon.png",
@@ -25,14 +24,13 @@
     "almightly_staff.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.18.0",
-    "minecraft": "~1.20.1",
-    "java": ">=17",
-    "architectury": ">=9.2.14",
+    "fabricloader": ">=0.19.2",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "architectury": ">=13.0.8",
     "fabric-api": "*",
     "hexcasting": "*"
   },
   "suggests": {
-    "another-mod": "*"
   }
 }

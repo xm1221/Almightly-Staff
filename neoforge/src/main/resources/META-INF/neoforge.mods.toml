@@ -1,0 +1,40 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+
+[[mods]]
+modId = "almightly_staff"
+version = "${version}"
+displayName = "Almightly Staff"
+authors = "xm1221"
+description = '''The grand unification of all hex-casting tools.'''
+
+[[dependencies.almightly_staff]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.almightly_staff]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.almightly_staff]]
+modId = "architectury"
+type = "required"
+versionRange = "[13.0.8,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.almightly_staff]]
+modId = "hexcasting"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[mixins]]
+config = "almightly_staff.mixins.json"

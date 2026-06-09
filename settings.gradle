@@ -3,12 +3,13 @@ pluginManagement {
         maven { url = 'https://maven.fabricmc.net/' }
         maven { url = 'https://maven.architectury.dev/' }
         maven { url = 'https://files.minecraftforge.net/maven/' }
-        maven { url = 'https://maven.neoforged.net/releases' }
-        maven{url='https://maven.blamejared.com/'}
         gradlePluginPortal()
     }
-}
+    plugins {
+        id "org.jetbrains.kotlin.jvm" version kotlinVersion
+    }
 
+}
 rootProject.name = 'almightly_staff'
 
 include 'common'

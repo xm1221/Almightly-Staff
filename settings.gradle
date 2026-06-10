@@ -1,14 +1,17 @@
 pluginManagement {
     repositories {
+        maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url = 'https://maven.aliyun.com/repository/public' }
+        maven{ url= 'https://mvnrepository.com/artifact/' }
+        maven{ url ='https://mirrors.qlu.edu.cn/bmclapi' }
         maven { url = 'https://maven.fabricmc.net/' }
         maven { url = 'https://maven.architectury.dev/' }
+
         maven {
             name = 'NeoForged'
             url = 'https://maven.neoforged.net/releases'
         }
         maven { url = 'https://files.minecraftforge.net/maven/' }
-        maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
-        maven { url = 'https://maven.aliyun.com/repository/public' }
         gradlePluginPortal()
     }
     plugins {

@@ -1,5 +1,6 @@
 plugins {
     id 'com.gradleup.shadow'
+    id 'architectury-plugin' version '3.4-SNAPSHOT'
 }
 
 architectury {

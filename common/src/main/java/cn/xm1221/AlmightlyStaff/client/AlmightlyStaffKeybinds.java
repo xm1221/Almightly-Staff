@@ -1,21 +1,14 @@
 package cn.xm1221.AlmightlyStaff.client;
 
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
-import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.architectury.event.events.client.ClientTickEvent;
+import dev.architectury.networking.NetworkManager;
 import dev.architectury.registry.client.keymappings.KeyMappingRegistry;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 
-/**
- * 注册并处理 Almightly Staff 的按键绑定。
- * 默认 V 键切换）。
- */
-@Environment(EnvType.CLIENT)
 public class AlmightlyStaffKeybinds {
     public static final String CATEGORY = "key.categories." + AlmightlyStaffMod.MOD_ID;
 
@@ -30,9 +23,9 @@ public class AlmightlyStaffKeybinds {
         KeyMappingRegistry.register(MODE_KEY);
 
         ClientTickEvent.CLIENT_POST.register(instance -> {
-            if(Minecraft.getInstance().player == null) return;
-            if (MODE_KEY.consumeClick()){
-                ModNetworking.CHANNEL.sendToServer(new ModNetworking.MsgAlmightlyStaffModeC2S());
+            if (Minecraft.getInstance().player == null) return;
+            if (MODE_KEY.consumeClick()) {
+                NetworkManager.sendToServer(new ModNetworking.MsgAlmightlyStaffModeC2S());
             }
             // 处理滚轮累积
             ShiftScrollListener.clientTickEnd();

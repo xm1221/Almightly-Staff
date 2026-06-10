@@ -1,117 +1,108 @@
 package cn.xm1221.AlmightlyStaff.network;
 
-import at.petrak.hexcasting.api.casting.ParticleSpray;
-import at.petrak.hexcasting.api.casting.eval.env.PackagedItemCastEnv;
-import at.petrak.hexcasting.api.casting.eval.vm.CastingVM;
-import at.petrak.hexcasting.api.casting.iota.Iota;
-import at.petrak.hexcasting.api.casting.iota.PatternIota;
-import at.petrak.hexcasting.common.msgs.MsgNewSpiralPatternsS2C;
-import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
-import dev.architectury.networking.NetworkChannel;
+import dev.architectury.networking.NetworkManager;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundSource;
-import net.minecraft.stats.Stat;
-import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.phys.Vec3;
-
-import java.util.List;
 
 /**
- * 统一管理 Almightly Staff mod 的所有网络消息。
- * 使用 Architectury NetworkChannel 实现跨平台（Fabric/Forge）兼容。
+ * 使用 MC 1.21.1 CustomPacketPayload + Architectury NetworkManager 的跨平台网络。
+ * 不使用任何弃用 API。
  */
 public class ModNetworking {
-    public static final NetworkChannel CHANNEL = NetworkChannel.create(
-        new ResourceLocation(AlmightlyStaffMod.MOD_ID, "network"));
 
     public static void init() {
-        // 注册滚轮翻页消息
-        CHANNEL.register(
-            MsgShiftScrollC2S.class,
-            MsgShiftScrollC2S::encode,
-            MsgShiftScrollC2S::decode,
-            MsgShiftScrollC2S::handle
-        );
-
-        // 注册模式切换消息
-        CHANNEL.register(
-            MsgAlmightlyStaffModeC2S.class,
-            MsgAlmightlyStaffModeC2S::encode,
-            MsgAlmightlyStaffModeC2S::decode,
-            MsgAlmightlyStaffModeC2S::handle
-        );
+        // C2S: scroll wheel
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgShiftScrollC2S.TYPE, MsgShiftScrollC2S.STREAM_CODEC,
+                (msg, ctx) -> msg.handle(ctx));
+        // C2S: mode key (V)
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgAlmightlyStaffModeC2S.TYPE, MsgAlmightlyStaffModeC2S.STREAM_CODEC,
+                (msg, ctx) -> msg.handle(ctx));
     }
 
     // ==================== 滚轮翻页消息 ====================
 
-    public record MsgShiftScrollC2S(double mainHandDelta, double offHandDelta,
-                                    boolean isCtrl, boolean invertSpellbook,
-                                    boolean invertAbacus) {
-        public static void encode(MsgShiftScrollC2S msg, FriendlyByteBuf buf) {
-            buf.writeDouble(msg.mainHandDelta);
-            buf.writeDouble(msg.offHandDelta);
-            buf.writeBoolean(msg.isCtrl);
-            buf.writeBoolean(msg.invertSpellbook);
-            buf.writeBoolean(msg.invertAbacus);
+    public static class MsgShiftScrollC2S implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<MsgShiftScrollC2S> TYPE =
+                new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "scroll"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgShiftScrollC2S> STREAM_CODEC =
+                StreamCodec.of((buf, msg) -> msg.write(buf), MsgShiftScrollC2S::new);
+
+        private final double mainHandDelta;
+        private final double offHandDelta;
+        private final boolean invertSpellbook;
+        private final boolean invertAbacus;
+
+        public MsgShiftScrollC2S(double mainHandDelta, double offHandDelta,
+                                  boolean invertSpellbook, boolean invertAbacus) {
+            this.mainHandDelta = mainHandDelta;
+            this.offHandDelta = offHandDelta;
+            this.invertSpellbook = invertSpellbook;
+            this.invertAbacus = invertAbacus;
         }
 
-        public static MsgShiftScrollC2S decode(FriendlyByteBuf buf) {
-            return new MsgShiftScrollC2S(
-                buf.readDouble(), buf.readDouble(),
-                buf.readBoolean(), buf.readBoolean(), buf.readBoolean()
-            );
+        private MsgShiftScrollC2S(RegistryFriendlyByteBuf buf) {
+            this(buf.readDouble(), buf.readDouble(), buf.readBoolean(), buf.readBoolean());
         }
 
-        public static void handle(MsgShiftScrollC2S msg,
-                                  java.util.function.Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctxSupplier) {
-            var ctx = ctxSupplier.get();
-            var sender = ctx.getPlayer() instanceof ServerPlayer sp ? sp : null;
-            if (sender == null) return;
+        private void write(RegistryFriendlyByteBuf buf) {
+            buf.writeDouble(mainHandDelta);
+            buf.writeDouble(offHandDelta);
+            buf.writeBoolean(invertSpellbook);
+            buf.writeBoolean(invertAbacus);
+        }
 
-            ctx.queue(() -> {
-                handleForHand(sender, InteractionHand.MAIN_HAND, msg.mainHandDelta, msg.invertSpellbook);
-                handleForHand(sender, InteractionHand.OFF_HAND, msg.offHandDelta, msg.invertSpellbook);
+        @Override
+        public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+
+        private void handle(NetworkManager.PacketContext context) {
+            var sender = context.getPlayer();
+            if (!(sender instanceof ServerPlayer sp)) return;
+            context.queue(() -> {
+                handleForHand(sp, InteractionHand.MAIN_HAND, mainHandDelta, invertSpellbook);
+                handleForHand(sp, InteractionHand.OFF_HAND, offHandDelta, invertAbacus);
             });
         }
 
         private static void handleForHand(ServerPlayer sender, InteractionHand hand,
-                                           double delta, boolean invertSpellbook) {
+                                           double delta, boolean invert) {
             if (delta == 0) return;
             var stack = sender.getItemInHand(hand);
             if (!(stack.getItem() instanceof ItemAlmightlyStaff)) return;
 
-            if (invertSpellbook) delta = -delta;
+            if (invert) delta = -delta;
 
-            var newIdx = ItemAlmightlyStaff.rotatePageIdx(stack, delta < 0.0);
+            var newIdx = ItemAlmightlyStaff.rotatePageIdx(stack, delta < 0.0, sender.level());
             var len = ItemAlmightlyStaff.highestPage(stack);
             var sealed = ItemAlmightlyStaff.isSealed(stack);
 
             MutableComponent component;
-            if (hand == InteractionHand.OFF_HAND && stack.hasCustomHoverName()) {
+            if (hand == InteractionHand.OFF_HAND && stack.has(DataComponents.CUSTOM_NAME)) {
+                var rarityColor = stack.getHoverName().getStyle().getColor();
                 if (sealed) {
                     component = Component.translatable("hexcasting.tooltip.spellbook.page_with_name.sealed",
                         Component.literal(String.valueOf(newIdx)).withStyle(ChatFormatting.WHITE),
                         Component.literal(String.valueOf(len)).withStyle(ChatFormatting.WHITE),
-                        Component.literal("").withStyle(stack.getRarity().color, ChatFormatting.ITALIC)
+                        Component.literal("").withStyle(style -> style.withItalic(true).withColor(rarityColor))
                             .append(stack.getHoverName()),
                         Component.translatable("hexcasting.tooltip.spellbook.sealed").withStyle(ChatFormatting.GOLD));
                 } else {
                     component = Component.translatable("hexcasting.tooltip.spellbook.page_with_name",
                         Component.literal(String.valueOf(newIdx)).withStyle(ChatFormatting.WHITE),
                         Component.literal(String.valueOf(len)).withStyle(ChatFormatting.WHITE),
-                        Component.literal("").withStyle(stack.getRarity().color, ChatFormatting.ITALIC)
+                        Component.literal("").withStyle(style -> style.withItalic(true).withColor(rarityColor))
                             .append(stack.getHoverName()));
                 }
             } else {
@@ -130,27 +121,27 @@ public class ModNetworking {
         }
     }
 
+    // ==================== 模式切换消息 ====================
 
+    public static class MsgAlmightlyStaffModeC2S implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<MsgAlmightlyStaffModeC2S> TYPE =
+                new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "mode"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgAlmightlyStaffModeC2S> STREAM_CODEC =
+                StreamCodec.of((buf, msg) -> {}, buf -> new MsgAlmightlyStaffModeC2S());
 
-    public record MsgAlmightlyStaffModeC2S() {
-        public static void encode(MsgAlmightlyStaffModeC2S msg, FriendlyByteBuf buf) {
-            // 空消息，无需额外数据
+        @Override
+        public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
+            return TYPE;
         }
 
-        public static MsgAlmightlyStaffModeC2S decode(FriendlyByteBuf buf) {
-            return new MsgAlmightlyStaffModeC2S();
-        }
-
-        public static void handle(MsgAlmightlyStaffModeC2S msg,
-                                  java.util.function.Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctxSupplier) {
-            var ctx = ctxSupplier.get();
-            var sender = ctx.getPlayer() instanceof ServerPlayer sp ? sp : null;
-            if (sender == null) return;
-
-            ctx.queue(() -> {
-                var stack = sender.getMainHandItem();
-                var item = stack.getItem();
-                if (item instanceof ItemAlmightlyStaff) ((ItemAlmightlyStaff) item).casting(sender.level(), sender, InteractionHand.MAIN_HAND);
+        private void handle(NetworkManager.PacketContext context) {
+            var sender = context.getPlayer();
+            if (!(sender instanceof ServerPlayer sp)) return;
+            context.queue(() -> {
+                var item = sp.getMainHandItem().getItem();
+                if (item instanceof ItemAlmightlyStaff staff) {
+                    staff.casting(sp.level(), sp, InteractionHand.MAIN_HAND);
+                }
             });
         }
     }

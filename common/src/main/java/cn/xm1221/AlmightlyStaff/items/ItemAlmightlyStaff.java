@@ -2,7 +2,6 @@ package cn.xm1221.AlmightlyStaff.items;
 
 
 import at.petrak.hexcasting.api.casting.ParticleSpray;
-import at.petrak.hexcasting.api.casting.eval.env.PackagedItemCastEnv;
 import at.petrak.hexcasting.api.casting.eval.env.StaffCastEnv;
 import at.petrak.hexcasting.api.casting.eval.vm.CastingVM;
 import at.petrak.hexcasting.api.casting.iota.Iota;
@@ -16,10 +15,8 @@ import at.petrak.hexcasting.api.pigment.FrozenPigment;
 import at.petrak.hexcasting.api.utils.MediaHelper;
 import at.petrak.hexcasting.api.utils.NBTHelper;
 import at.petrak.hexcasting.common.items.HexBaubleItem;
-import at.petrak.hexcasting.common.items.magic.ItemMediaBattery;
 import at.petrak.hexcasting.common.items.storage.ItemSpellbook;
 import at.petrak.hexcasting.common.lib.HexAttributes;
-import at.petrak.hexcasting.common.lib.HexItems;
 import at.petrak.hexcasting.common.lib.HexSounds;
 import at.petrak.hexcasting.common.msgs.MsgClearSpiralPatternsS2C;
 import at.petrak.hexcasting.common.msgs.MsgNewSpiralPatternsS2C;
@@ -27,19 +24,19 @@ import at.petrak.hexcasting.common.msgs.MsgOpenSpellGuiS2C;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
-import net.minecraft.util.Mth;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.animal.allay.Allay;
@@ -48,20 +45,18 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.client.Minecraft;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
 
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
-import static at.petrak.hexcasting.api.utils.NBTHelper.getList;
 import static at.petrak.hexcasting.common.items.ItemLens.GRID_ZOOM;
 import static at.petrak.hexcasting.common.items.ItemLens.SCRY_SIGHT;
 import static at.petrak.hexcasting.common.items.magic.ItemMediaHolder.HEX_COLOR;
@@ -69,11 +64,9 @@ import static at.petrak.hexcasting.common.items.magic.ItemMediaHolder.HEX_COLOR;
 
 public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, HexBaubleItem, MediaHolderItem {
 
-
     public ItemAlmightlyStaff(Properties properties) {
         super(properties);
     }
-
 
     private static final DecimalFormat PERCENTAGE = new DecimalFormat("####");
 
@@ -83,8 +76,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     private static final DecimalFormat DUST_AMOUNT = new DecimalFormat("###,###.##");
 
-    public static final String BAR_COLOR="bar_color";
-
+    public static final String BAR_COLOR = "bar_color";
 
     @Override
     public @NotNull UseAnim getUseAnimation(ItemStack pStack) {
@@ -94,8 +86,6 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     @Override
     public @NotNull InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
         ItemStack stack = player.getItemInHand(usedHand);
-
-        // 右键永远弹编辑 GUI
         if (player.getAttributeValue(HexAttributes.FEEBLE_MIND) > 0) {
             return InteractionResultHolder.fail(stack);
         }
@@ -113,9 +103,8 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         if (!world.isClientSide() && player instanceof ServerPlayer serverPlayer) {
             var vm = IXplatAbstractions.INSTANCE.getStaffcastVM(serverPlayer, usedHand);
             var patterns = IXplatAbstractions.INSTANCE.getPatternsSavedInUi(serverPlayer);
-            var descs = vm.generateDescs();
             IXplatAbstractions.INSTANCE.sendPacketToPlayer(serverPlayer,
-                    new MsgOpenSpellGuiS2C(usedHand, patterns, descs.getFirst(), descs.getSecond(), 0));
+                    new MsgOpenSpellGuiS2C(usedHand, patterns, List.of(), new net.minecraft.nbt.CompoundTag(), 0));
         }
 
         player.awardStat(Stats.ITEM_USED.get(this));
@@ -162,11 +151,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
             new ParticleSpray(player.position(), new Vec3(0.0, 1.5, 0.0), 0.4, Math.PI / 3, 30)
                     .sprayParticles(sPlayer.serverLevel(), ctx.getPigment());
         }
-        
     }
-
-
-
 
     private boolean breakAfterDepletion() {
         return false;
@@ -188,13 +173,13 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public @Nullable List<Iota> getHex(ItemStack stack, ServerLevel level) {
-        Iota hex = readIota(stack, level);
+        Iota hex = readIota(stack);
         List<Iota> list = new ArrayList<>();
-        if(hex instanceof ListIota){
-           for (Iota iota:((ListIota)hex).getList()){
-               list.add(iota);
-           }
-           return list;
+        if (hex instanceof ListIota) {
+            for (Iota iota : ((ListIota) hex).getList()) {
+                list.add(iota);
+            }
+            return list;
         }
         list.add(hex);
         return list;
@@ -202,13 +187,13 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public void writeHex(ItemStack stack, List<Iota> program, @Nullable FrozenPigment pigment, long media) {
-        writeDatum(stack,new ListIota(program));
+        writeDatum(stack, new ListIota(program));
         setMedia(stack, media);
     }
 
     @Override
     public void clearHex(ItemStack stack) {
-        writeDatum(stack,null);
+        writeDatum(stack, null);
     }
 
     @Override
@@ -216,20 +201,37 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         return null;
     }
 
+    // ========== MediaHolderItem via CustomData + NBTHelper ==========
+
+    private static CompoundTag getCustomDataTag(ItemStack stack) {
+        CustomData cd = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+        return cd.copyTag();
+    }
+
+    private static void setCustomDataTag(ItemStack stack, CompoundTag tag) {
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
     @Override
     public long getMedia(ItemStack stack) {
-        return NBTHelper.getLong(stack, "media");
+        return NBTHelper.getLong(getCustomDataTag(stack), "media");
     }
 
     @Override
     public long getMaxMedia(ItemStack stack) {
-        return NBTHelper.getLong(stack, "max_media");
+        return NBTHelper.getLong(getCustomDataTag(stack), "max_media");
     }
 
     @Override
     public void setMedia(ItemStack stack, long media) {
-        NBTHelper.putLong(stack, "max_media", media);
-        NBTHelper.putLong(stack, "media", media);
+        CompoundTag tag = getCustomDataTag(stack);
+        if(media >= getMaxMedia(stack)) {
+            NBTHelper.putLong(tag, "media", getMaxMedia(stack));
+            return;
+        }
+        //NBTHelper.putLong(tag, "max_media", media);
+        NBTHelper.putLong(tag, "media", media);
+        setCustomDataTag(stack, tag);
     }
 
     @Override
@@ -243,25 +245,25 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     }
 
     @Override
-    public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(EquipmentSlot slot) {
-        var out = HashMultimap.create(super.getDefaultAttributeModifiers(slot));
-        if ( slot == EquipmentSlot.MAINHAND || slot == EquipmentSlot.OFFHAND) {
-            out.put(HexAttributes.GRID_ZOOM, GRID_ZOOM);
-            out.put(HexAttributes.SCRY_SIGHT, SCRY_SIGHT);
-        }
-        return out;
+    public ItemAttributeModifiers getDefaultAttributeModifiers() {
+        var builder = ItemAttributeModifiers.builder();
+        builder.add(HexAttributes.GRID_ZOOM, GRID_ZOOM, EquipmentSlotGroup.MAINHAND);
+        builder.add(HexAttributes.SCRY_SIGHT, SCRY_SIGHT, EquipmentSlotGroup.MAINHAND);
+        builder.add(HexAttributes.GRID_ZOOM, GRID_ZOOM, EquipmentSlotGroup.OFFHAND);
+        builder.add(HexAttributes.SCRY_SIGHT, SCRY_SIGHT, EquipmentSlotGroup.OFFHAND);
+        return builder.build();
     }
 
     @Override
-    public Multimap<Attribute, AttributeModifier> getHexBaubleAttrs(ItemStack stack) {
-        HashMultimap<Attribute, AttributeModifier> out = HashMultimap.create();
+    public Multimap<Holder<Attribute>, AttributeModifier> getHexBaubleAttrs(ItemStack stack) {
+        HashMultimap<Holder<Attribute>, AttributeModifier> out = HashMultimap.create();
         out.put(HexAttributes.GRID_ZOOM, GRID_ZOOM);
         out.put(HexAttributes.SCRY_SIGHT, SCRY_SIGHT);
         return out;
     }
 
     @Override
-    public void appendHoverText(ItemStack pStack, @Nullable Level pLevel, List<Component> pTooltipComponents,
+    public void appendHoverText(ItemStack pStack, Item.TooltipContext pContext, List<Component> pTooltipComponents,
                                 TooltipFlag pIsAdvanced) {
         var maxMedia = getMaxMedia(pStack);
         if (maxMedia > 0) {
@@ -272,7 +274,8 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
             var mediamount = Component.literal(DUST_AMOUNT.format(media / (float) MediaConstants.DUST_UNIT));
             var percentFull = Component.literal(PERCENTAGE.format(100f * fullness) + "%");
-            var maxCapacity = Component.translatable("hexcasting.tooltip.media", DUST_AMOUNT.format(maxMedia / (float) MediaConstants.DUST_UNIT));
+            var maxCapacity = Component.translatable("hexcasting.tooltip.media",
+                    DUST_AMOUNT.format(maxMedia / (float) MediaConstants.DUST_UNIT));
 
             mediamount.withStyle(style -> style.withColor(HEX_COLOR));
             maxCapacity.withStyle(style -> style.withColor(HEX_COLOR));
@@ -282,22 +285,25 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
                     Component.translatable("hexcasting.tooltip.media_amount.advanced",
                             mediamount, maxCapacity, percentFull));
         }
-        super.appendHoverText(pStack, pLevel, pTooltipComponents, pIsAdvanced);
+
+        super.appendHoverText(pStack, pContext, pTooltipComponents, pIsAdvanced);
     }
 
     @Override
     public void inventoryTick(ItemStack itemStack, Level level, Entity entity, int i, boolean bl) {
-        if(entity instanceof Allay ||entity instanceof ServerPlayer) {
-            var media=getMedia(itemStack);
-            if(media<=getMaxMedia(itemStack) && level.getGameTime()%13==0) {
-                addMedia(itemStack, (long) (media+MediaConstants.DUST_UNIT));
+        if (entity instanceof Allay || entity instanceof ServerPlayer) {
+            var media = getMedia(itemStack);
+            if (media <= getMaxMedia(itemStack) && level.getGameTime() % 13 == 0) {
+                addMedia(itemStack, media + MediaConstants.DUST_UNIT);
             }
         }
     }
 
     public void addMedia(ItemStack itemStack, long media) {
-        if(media<=getMaxMedia(itemStack)) {
-            NBTHelper.putLong(itemStack, "media", media);
+        if (media <= getMaxMedia(itemStack)) {
+            CompoundTag tag = getCustomDataTag(itemStack);
+            NBTHelper.putLong(tag, "media", media);
+            setCustomDataTag(itemStack, tag);
         }
     }
 
@@ -308,14 +314,17 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public int getBarColor(ItemStack itemStack) {
-        if (itemStack.getTag() != null && (!itemStack.hasTag() || !itemStack.getTag().contains(BAR_COLOR))) {
-            return 0xb38ef3;
+        CompoundTag tag = getCustomDataTag(itemStack);
+        if (tag.contains(BAR_COLOR)) {
+            return NBTHelper.getInt(tag, BAR_COLOR);
         }
-        return NBTHelper.getInt(itemStack, BAR_COLOR);
+        return 0xb38ef3;
     }
 
     public void setBarColor(ItemStack itemStack, int color) {
-        NBTHelper.putInt(itemStack, BAR_COLOR, color);
+        CompoundTag tag = getCustomDataTag(itemStack);
+        NBTHelper.putInt(tag, BAR_COLOR, color);
+        setCustomDataTag(itemStack, tag);
     }
 
     @Override
@@ -327,13 +336,12 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public void onCraftedBy(ItemStack itemStack, Level level, Player player) {
-        if(level.isClientSide) {
+        if (level.isClientSide) {
             return;
         }
-        var color=new StaffCastEnv((ServerPlayer) player,InteractionHand.MAIN_HAND).getPigment().getColorProvider().getColor(level.getGameTime(),player.position());
+        var color = new StaffCastEnv((ServerPlayer) player, InteractionHand.MAIN_HAND)
+                .getPigment().getColorProvider().getColor(level.getGameTime(), player.position());
         setBarColor(itemStack, color);
-        NBTHelper.putLong(itemStack, "max_media", 64*MediaConstants.CRYSTAL_UNIT);
+        setMedia(itemStack, 64 * MediaConstants.CRYSTAL_UNIT);
     }
-
-
 }

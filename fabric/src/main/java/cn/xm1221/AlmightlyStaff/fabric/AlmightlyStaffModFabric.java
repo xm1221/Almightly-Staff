@@ -5,20 +5,17 @@ import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.AlmightlyStaffItems;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 public final class AlmightlyStaffModFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         AlmightlyStaffMod.init();
-        AlmightlyStaffMod.registerItems();
+        AlmightlyStaffMod.registerItems((item, id) -> Registry.register(BuiltInRegistries.ITEM, id, item));
 
-        if (BuiltInRegistries.CREATIVE_MODE_TAB.getResourceKey(HexCreativeTabs.HEX).isPresent()) {
-            ItemGroupEvents.modifyEntriesEvent(
-                BuiltInRegistries.CREATIVE_MODE_TAB.getResourceKey(HexCreativeTabs.HEX).get()
-            ).register(entries -> {
-                entries.accept(AlmightlyStaffItems.getStaff());
-            });
-        }
+        // Add to Hex Casting creative tab
+        ItemGroupEvents.modifyEntriesEvent(HexCreativeTabs.HEX_KEY).register(entries ->
+            entries.accept(AlmightlyStaffItems.getStaff()));
     }
 }

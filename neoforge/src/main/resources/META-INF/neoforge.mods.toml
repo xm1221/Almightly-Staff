@@ -1,5 +1,6 @@
 modLoader = "javafml"
 loaderVersion = "[4,)"
+license = "MIT"
 
 [[mods]]
 modId = "almightly_staff"
@@ -7,6 +8,7 @@ version = "${version}"
 displayName = "Almightly Staff"
 authors = "xm1221"
 description = '''The grand unification of all hex-casting tools.'''
+
 
 [[dependencies.almightly_staff]]
 modId = "neoforge"

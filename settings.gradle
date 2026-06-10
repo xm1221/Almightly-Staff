@@ -1,13 +1,17 @@
 pluginManagement {
     repositories {
-        maven { url = 'https://maven.fabricmc.net/' }
-        maven { url = 'https://maven.architectury.dev/' }
-        maven { url = 'https://files.minecraftforge.net/maven/' }
-        maven{url='https://maven.blamejared.com/'}
+        maven { url 'https://maven.fabricmc.net/' }
+        maven { url 'https://maven.architectury.dev/' }
+        maven { url 'https://files.minecraftforge.net/#/maven/' }
+        maven { url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://repo.spongepowered.org/repository/maven-public/' }
+        maven{ url 'https://repo.spongepowered.org/service/rest/repository/browse/maven-public/' }
+        maven { url 'https://maven.blamejared.com' }
+        maven { url 'https://plugins.gradle.org/m2/' }
+        //flatDir{dir "libs"}
         gradlePluginPortal()
     }
 }
-
 rootProject.name = 'almightly_staff'
 
 include 'common'

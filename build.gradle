@@ -1,8 +1,12 @@
 plugins {
     id 'dev.architectury.loom' version '1.11-SNAPSHOT' apply false
     id 'architectury-plugin' version '3.4-SNAPSHOT'
-    id 'com.github.johnrengelman.shadow' version '8.1.1' apply false
+    id 'com.github.johnrengelman.shadow' version "8.1.1"
+    id "org.jetbrains.kotlin.jvm" version "2.0.0"
+
 }
+
+apply plugin: "org.jetbrains.kotlin.jvm"
 
 architectury {
     minecraft = project.minecraft_version
@@ -46,6 +50,7 @@ subprojects {
         maven { url = "https://maven.terraformersmc.com/releases" }
         maven { url = "https://maven.ladysnake.org/releases" }
         maven { url = "https://mvn.devos.one/snapshots/" }
+        maven { url = 'https://maven.aliyun.com/repository/public' }
         flatDir { dir "libs/" }
     }
 

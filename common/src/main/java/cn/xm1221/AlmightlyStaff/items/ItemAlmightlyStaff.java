@@ -243,6 +243,11 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     }
 
     @Override
+    public int numVariants() {
+        return 5; // 0~4，对应 cad/0~4_all_in_one.png
+    }
+
+    @Override
     public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(EquipmentSlot slot) {
         var out = HashMultimap.create(super.getDefaultAttributeModifiers(slot));
         if ( slot == EquipmentSlot.MAINHAND || slot == EquipmentSlot.OFFHAND) {

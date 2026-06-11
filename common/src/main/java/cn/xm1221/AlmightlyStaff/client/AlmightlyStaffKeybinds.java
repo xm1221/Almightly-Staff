@@ -3,6 +3,8 @@ package cn.xm1221.AlmightlyStaff.client;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
+import at.petrak.hexcasting.common.items.storage.ItemFocus;
+import at.petrak.hexcasting.xplat.IClientXplatAbstractions;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.architectury.event.events.client.ClientTickEvent;
 import dev.architectury.registry.client.keymappings.KeyMappingRegistry;
@@ -28,6 +30,13 @@ public class AlmightlyStaffKeybinds {
 
     public static void init() {
         KeyMappingRegistry.register(MODE_KEY);
+
+        // 注册 hexcasting:variant 属性，用于模型变体切换
+        IClientXplatAbstractions.INSTANCE.registerItemProperty(
+            AlmightlyStaffMod.ALL_IN_ONE,
+            ItemFocus.VARIANT_PRED,
+            (stack, level, holder, holderID) -> ((ItemAlmightlyStaff) stack.getItem()).getVariant(stack)
+        );
 
         ClientTickEvent.CLIENT_POST.register(instance -> {
             if(Minecraft.getInstance().player == null) return;

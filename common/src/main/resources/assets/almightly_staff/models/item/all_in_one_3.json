@@ -1,0 +1,7 @@
+{
+  "parent": "almightly_staff:item/all_in_one",
+  "textures": {
+    "0": "almightly_staff:item/cad/3_all_in_one",
+    "particle": "almightly_staff:item/cad/3_all_in_one"
+  }
+}

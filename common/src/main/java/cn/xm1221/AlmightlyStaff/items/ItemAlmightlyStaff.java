@@ -294,8 +294,8 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     public void inventoryTick(ItemStack itemStack, Level level, Entity entity, int i, boolean bl) {
         if(entity instanceof Allay ||entity instanceof ServerPlayer) {
             var media=getMedia(itemStack);
-            if(media<=getMaxMedia(itemStack) && level.getGameTime()%13==0) {
-                addMedia(itemStack, (long) (media+MediaConstants.DUST_UNIT));
+            if(media<=getMaxMedia(itemStack) && level.getGameTime()%260==0) {
+                addMedia(itemStack, (long) (media+20*MediaConstants.DUST_UNIT));
             }
         }
     }

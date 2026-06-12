@@ -130,12 +130,5 @@
 			"color": 0,
 			"children": [4]
 		}
-	],
-	"overrides": [
-		{ "predicate": { "hexcasting:variant": 0 }, "model": "almightly_staff:item/all_in_one_0" },
-		{ "predicate": { "hexcasting:variant": 1 }, "model": "almightly_staff:item/all_in_one_1" },
-		{ "predicate": { "hexcasting:variant": 2 }, "model": "almightly_staff:item/all_in_one_2" },
-		{ "predicate": { "hexcasting:variant": 3 }, "model": "almightly_staff:item/all_in_one_3" },
-		{ "predicate": { "hexcasting:variant": 4 }, "model": "almightly_staff:item/all_in_one_4" }
 	]
 }

@@ -13,6 +13,14 @@
       "text": "hexcasting.page.almightly_staff.2"
     },
     {
+      "type": "patchouli:text",
+      "text": "hexcasting.page.almightly_staff.4"
+    },
+    {
+      "type": "patchouli:text",
+      "text": "hexcasting.page.almightly_staff.5"
+    },
+    {
       "type": "patchouli:crafting",
       "recipe": "almightly_staff:all_in_one",
       "text": "hexcasting.page.almightly_staff.crafting.desc"

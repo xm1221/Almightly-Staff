@@ -3,6 +3,7 @@ package cn.xm1221.AlmightlyStaff.client;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
+import cn.xm1221.AlmightlyStaff.gui.AlmightlyStaffIDEScreen;
 import at.petrak.hexcasting.common.items.storage.ItemFocus;
 import at.petrak.hexcasting.xplat.IClientXplatAbstractions;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -28,8 +29,16 @@ public class AlmightlyStaffKeybinds {
         CATEGORY
     );
 
+    public static final KeyMapping IDE_KEY = new KeyMapping(
+        "key." + AlmightlyStaffMod.MOD_ID + ".ide",
+        InputConstants.Type.KEYSYM,
+        org.lwjgl.glfw.GLFW.GLFW_KEY_B,
+        CATEGORY
+    );
+
     public static void init() {
         KeyMappingRegistry.register(MODE_KEY);
+        KeyMappingRegistry.register(IDE_KEY);
 
         // 注册 hexcasting:variant 属性，用于模型变体切换
         IClientXplatAbstractions.INSTANCE.registerItemProperty(
@@ -42,6 +51,12 @@ public class AlmightlyStaffKeybinds {
             if(Minecraft.getInstance().player == null) return;
             if (MODE_KEY.consumeClick()){
                 ModNetworking.CHANNEL.sendToServer(new ModNetworking.MsgAlmightlyStaffModeC2S());
+            }
+            if (IDE_KEY.consumeClick() && !(Minecraft.getInstance().screen instanceof AlmightlyStaffIDEScreen)){
+                var stack = Minecraft.getInstance().player.getMainHandItem();
+                if (stack.getItem() instanceof ItemAlmightlyStaff) {
+                    Minecraft.getInstance().setScreen(new AlmightlyStaffIDEScreen());
+                }
             }
             // 处理滚轮累积
             ShiftScrollListener.clientTickEnd();

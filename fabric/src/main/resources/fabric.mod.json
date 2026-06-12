@@ -33,6 +33,6 @@
     "hexcasting": "*"
   },
   "suggests": {
-    "another-mod": "*"
+    "hexparse": "*"
   }
 }

@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.RegisterEvent;
 
@@ -25,8 +26,10 @@ public final class AlmightlyStaffModNeoForge {
         // Item registration (HexMod bind pattern)
         bind(Registries.ITEM, AlmightlyStaffMod::registerItems);
 
-        // Client-side init (handles its own side-check via event types)
-        MOD_BUS.register(AlmightlyStaffModNeoForgeClient.class);
+        // Client-side init (only on physical client)
+        if (FMLLoader.getDist().isClient()) {
+            MOD_BUS.register(AlmightlyStaffModNeoForgeClient.class);
+        }
 
         // Add to Hex Casting creative tab
         MOD_BUS.addListener(BuildCreativeModeTabContentsEvent.class, event -> {

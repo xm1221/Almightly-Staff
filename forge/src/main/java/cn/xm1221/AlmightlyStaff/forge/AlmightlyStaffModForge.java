@@ -3,8 +3,11 @@ package cn.xm1221.AlmightlyStaff.forge;
 import at.petrak.hexcasting.common.lib.HexCreativeTabs;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.AlmightlyStaffItems;
+import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import dev.architectury.platform.forge.EventBuses;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Rarity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
@@ -27,8 +30,8 @@ public final class AlmightlyStaffModForge {
             if (event.getRegistryKey().equals(ForgeRegistries.Keys.ITEMS)) {
                 event.register(ForgeRegistries.Keys.ITEMS, helper -> {
                     helper.register(
-                            ResourceLocation.tryBuild(AlmightlyStaffMod.MOD_ID, "all_in_one"),
-                            AlmightlyStaffMod.ALL_IN_ONE
+                            ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "all_in_one"),
+                           AlmightlyStaffMod.ALL_IN_ONE
                     );
                 });
             }

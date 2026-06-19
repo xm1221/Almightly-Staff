@@ -1,12 +1,12 @@
 {
   "required": true,
   "package": "cn.xm1221.AlmightlyStaff.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_17",
   "minVersion": "0.8",
   "client": [
-    "MixinGuiSpellcasting"
   ],
   "mixins": [
+
   ],
   "injectors": {
     "defaultRequire": 1

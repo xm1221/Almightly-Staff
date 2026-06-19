@@ -12,6 +12,7 @@ import at.petrak.hexcasting.api.item.MediaHolderItem;
 import at.petrak.hexcasting.api.misc.MediaConstants;
 import at.petrak.hexcasting.api.mod.HexConfig;
 import at.petrak.hexcasting.api.pigment.FrozenPigment;
+import at.petrak.hexcasting.api.utils.MathUtils;
 import at.petrak.hexcasting.api.utils.MediaHelper;
 import at.petrak.hexcasting.api.utils.NBTHelper;
 import at.petrak.hexcasting.common.items.HexBaubleItem;
@@ -217,8 +218,8 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public void setMedia(ItemStack stack, long media) {
-        NBTHelper.putLong(stack, "max_media", media);
-        NBTHelper.putLong(stack, "media", media);
+        //NBTHelper.putLong(stack, "max_media", media);
+        NBTHelper.putLong(stack, "media", MathUtils.clamp(media, 0, getMaxMedia(stack)));
     }
 
     @Override
@@ -326,6 +327,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         }
         var color=new StaffCastEnv((ServerPlayer) player,InteractionHand.MAIN_HAND).getPigment().getColorProvider().getColor(level.getGameTime(),player.position());
         setBarColor(itemStack, color);
+        NBTHelper.putLong(itemStack, "media", 0);
         NBTHelper.putLong(itemStack, "max_media", 64*MediaConstants.CRYSTAL_UNIT);
     }
 

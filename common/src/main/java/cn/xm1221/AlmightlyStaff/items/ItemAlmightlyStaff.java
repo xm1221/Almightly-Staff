@@ -105,7 +105,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
             var vm = IXplatAbstractions.INSTANCE.getStaffcastVM(serverPlayer, usedHand);
             var patterns = IXplatAbstractions.INSTANCE.getPatternsSavedInUi(serverPlayer);
             IXplatAbstractions.INSTANCE.sendPacketToPlayer(serverPlayer,
-                    new MsgOpenSpellGuiS2C(usedHand, patterns, List.of(), new net.minecraft.nbt.CompoundTag(), 0));
+                    new MsgOpenSpellGuiS2C(usedHand, patterns, vm.getImage().getStack(), new net.minecraft.nbt.CompoundTag(), 0));
         }
 
         player.awardStat(Stats.ITEM_USED.get(this));
@@ -294,7 +294,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     public void inventoryTick(ItemStack itemStack, Level level, Entity entity, int i, boolean bl) {
         if (entity instanceof Allay || entity instanceof ServerPlayer) {
             var media = getMedia(itemStack);
-            if (media <= getMaxMedia(itemStack) && level.getGameTime() % 13 == 0) {
+            if (media < getMaxMedia(itemStack) && level.getGameTime() % 13 == 0) {
                 addMedia(itemStack, media + MediaConstants.DUST_UNIT);
             }
         }
@@ -304,6 +304,11 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         if (media <= getMaxMedia(itemStack)) {
             CompoundTag tag = getCustomDataTag(itemStack);
             NBTHelper.putLong(tag, "media", media);
+            setCustomDataTag(itemStack, tag);
+        }
+        else  {
+            CompoundTag tag = getCustomDataTag(itemStack);
+            NBTHelper.putLong(tag, "media", getMaxMedia(itemStack));
             setCustomDataTag(itemStack, tag);
         }
     }

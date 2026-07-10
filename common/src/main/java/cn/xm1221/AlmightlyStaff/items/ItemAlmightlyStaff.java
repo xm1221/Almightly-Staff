@@ -85,7 +85,6 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     public @NotNull InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
         ItemStack stack = player.getItemInHand(usedHand);
 
-        // 右键永远弹编辑 GUI
         if (player.getAttributeValue(HexAttributes.FEEBLE_MIND) > 0) {
             return InteractionResultHolder.fail(stack);
         }

@@ -1,7 +1,7 @@
 {
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
-	"texture_size": [128, 128],
+	"texture_size": [64, 64],
 	"textures": {
 		"0": "almightly_staff:item/cad/4_all_in_one",
 		"particle": "almightly_staff:item/cad/4_all_in_one"
@@ -130,12 +130,5 @@
 			"color": 0,
 			"children": [4]
 		}
-	],
-	"overrides": [
-		{ "predicate": { "hexcasting:variant": 0 }, "model": "almightly_staff:item/all_in_one_0" },
-		{ "predicate": { "hexcasting:variant": 1 }, "model": "almightly_staff:item/all_in_one_1" },
-		{ "predicate": { "hexcasting:variant": 2 }, "model": "almightly_staff:item/all_in_one_2" },
-		{ "predicate": { "hexcasting:variant": 3 }, "model": "almightly_staff:item/all_in_one_3" },
-		{ "predicate": { "hexcasting:variant": 4 }, "model": "almightly_staff:item/all_in_one_4" }
 	]
 }

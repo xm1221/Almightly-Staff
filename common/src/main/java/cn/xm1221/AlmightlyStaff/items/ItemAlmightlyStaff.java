@@ -9,6 +9,7 @@ import at.petrak.hexcasting.api.casting.iota.ListIota;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
 import at.petrak.hexcasting.api.item.HexHolderItem;
 import at.petrak.hexcasting.api.item.MediaHolderItem;
+import at.petrak.hexcasting.api.item.VariantItem;
 import at.petrak.hexcasting.api.misc.MediaConstants;
 import at.petrak.hexcasting.api.mod.HexConfig;
 import at.petrak.hexcasting.api.pigment.FrozenPigment;
@@ -63,7 +64,7 @@ import static at.petrak.hexcasting.common.items.ItemLens.SCRY_SIGHT;
 import static at.petrak.hexcasting.common.items.magic.ItemMediaHolder.HEX_COLOR;
 
 
-public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, HexBaubleItem, MediaHolderItem {
+public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, HexBaubleItem, MediaHolderItem , VariantItem {
 
     public ItemAlmightlyStaff(Properties properties) {
         super(properties);
@@ -350,4 +351,9 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         setBarColor(itemStack, color);
         setMedia(itemStack, 64 * MediaConstants.CRYSTAL_UNIT);
     }
+
+    @Override
+    public int numVariants(){
+        return 5;
+    };
 }

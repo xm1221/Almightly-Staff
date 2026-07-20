@@ -3,8 +3,14 @@
   "hexcasting.page.almightly_staff.1": "The $(item)Almightly Staff/$ appears as a book. it is a $(thing)grand unification/$ of all my hex-casting tools. It combines the multi-page iota storage of a $(l:items/spellbook)$(item)Spellbook/$, the scrying sight of a $(l:items/lens)$(item)Scrying Lens/$, and the casting interface of a $(l:items/staff)$(item)Staff/$ into a single implement.$(br2)With up to $(thing)sixty-four/$ pages, each capable of holding any iota, it also functions as a reusable spell-casting item.",
   "hexcasting.page.almightly_staff.2": "Using the staff is intuitive:$(br2)$(thing)Right-click/$ opens the familiar hex-casting grid, just like any $(l:items/staff)$(item)Staff/$. Iota can also be written directly in the usual manner, with pages turned by $(thing)sneak-scrolling/$ just as one would with a spellbook.$(br2)But the true power lies in the $(thing)V key/$. Once I have stored a spell, pressing $(k:almightly_staff.mode) instantly $(thing)casts/$ the iota on the active page;no fiddling with the grid required.",
   "hexcasting.page.almightly_staff.3": "But the true power lies in the $(thing)V key/$. Once I have stored a spell, pressing $(k:almightly_staff.mode) instantly $(thing)casts/$ the iota on the active page;no fiddling with the grid required.",
+  "hexcasting.page.almightly_staff.4": "The $(thing)Staff IDE/$, opened with $(k:almightly_staff.ide), provides a powerful iota editing interface.$(br2)The $(thing)left panel/$ displays all iotas on the current page. Click any iota to place the $(thing)cursor/$, then use $(thing)Shift+Click/$ to select a range.$(br2)Bottom buttons provide $(thing)Copy(C)/Paste(V)/Cut(X)/Delete(Del)/$ operations on selected iotas, plus $(thing)Arrow keys/$ to move the cursor.",
+  "hexcasting.page.almightly_staff.5": "The $(thing)right panel/$ features a hex-casting grid. In $(thing)Write(W) mode/$, each drawn pattern becomes a $(item)PatternIota/$ added to the list. In $(thing)Cast(C) mode/$, patterns are executed immediately.$(br2)The $(thing)Parse button/$ converts iotas to text code for editing. With $(item)HexParse/$ installed, you can write code directly and convert it back to iotas.$(br2)The $(thing)Spc and NL buttons/$ insert comment iotas for code formatting.",
   "hexcasting.page.almightly_staff.crafting.desc": "$(italic)All is one, and one is all./$",
   "item.almightly_staff.all_in_one": "Almightly Staff",
   "key.almightly_staff.mode": "Almightly Staff Casting",
-  "key.categories.almightly_staff": "Almightly Staff"
+  "key.almightly_staff.ide": "Open Almightly Staff GUI",
+  "key.categories.almightly_staff": "Almightly Staff",
+  "almightly_staff.ide.title": "ALL IN ONE",
+  "almightly_staff.ide.written": "Iota written to staff.",
+  "almightly_staff.ide.grid_hint": "[Grid hidden - click Grid to show]"
 }

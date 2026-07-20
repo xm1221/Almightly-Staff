@@ -3,8 +3,14 @@
   "hexcasting.page.almightly_staff.1": "$(item)万法之杖/$看起来像一本书;它是所有咒术工具的$(thing)大一统/$。它将$(l:items/spellbook)$(item)法术书/$的多页Iota存储、探知透镜的咒术视觉，以及$(l:items/staff)$(item)法杖/$的施法，统统融于一体。$(br2)多达$(thing)六十四/$页，每页皆可存储任意Iota；还拥有施法物品的功能。甚至还是一个可以自动回复媒质的媒质瓶！当它存在于玩家或悦灵的物品栏中时，就会自行回复媒质。",
   "hexcasting.page.almightly_staff.2": "使用起来十分直观：$(br2)$(thing)右键/$打开熟悉的六边形施法网格，与任何$(l:items/staff)$(item)法杖/$无异。也可以直接以惯用方式写入Iota，像法术书一样翻页$(br2)但真正强大的功能在于$(thing)V键/$。一旦存储了咒法，按下$(k:almightly_staff.mode)即可瞬间$(thing)施放/$当前页的Iota;",
   "hexcasting.page.almightly_staff.3": "但真正强大的功能在于$(thing)V键/$。手持存储了咒法的万法之杖，按下$(k:almightly_staff.mode)即可瞬间$(thing)施放/$当前页的Iota;",
+  "hexcasting.page.almightly_staff.4": "$(thing)法杖IDE/$, 按下$(k:almightly_staff.ide)打开，提供强大的Iota编辑界面。$(br2)$(thing)左侧面板/$显示当前页所有Iota。点击任意Iota放置$(thing)光标/$，使用$(thing)Shift+点击/$可范围选中。$(br2)底部按钮支持$(thing)复制(C)/粘贴(V)/剪切(X)/删除(Del)/$操作，以及$(thing)方向键/$移动光标。",
+  "hexcasting.page.almightly_staff.5": "$(thing)右侧面板/$是六边形施法网格。$(thing)Write(W)模式/$下，每个绘制的图案变成$(item)PatternIota/$加入列表。$(thing)Cast(C)模式/$下，图案立即执行施法。$(br2)$(thing)Parse按钮/$将Iota转为文本代码编辑。安装$(item)HexParse/$后可直接编写代码并转回Iota。$(br2)$(thing)Spc和NL按钮/$插入注释Iota用于代码排版。",
   "hexcasting.page.almightly_staff.crafting.desc": "$(italic)一即是全，全本为一",
   "item.almightly_staff.all_in_one": "万法之杖",
   "key.almightly_staff.mode": "万法之杖执行",
-  "key.categories.almightly_staff": "万法之杖"
+  "key.almightly_staff.ide": "打开万法之杖GUI",
+  "key.categories.almightly_staff": "万法之杖",
+  "almightly_staff.ide.title": "万法偕同",
+  "almightly_staff.ide.written": "Iota 已写入法杖。",
+  "almightly_staff.ide.grid_hint": "[网格已隐藏 - 点击 Grid 显示]"
 }

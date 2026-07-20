@@ -103,10 +103,9 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         }
 
         if (!world.isClientSide() && player instanceof ServerPlayer serverPlayer) {
-            var vm = IXplatAbstractions.INSTANCE.getStaffcastVM(serverPlayer, usedHand);
             var patterns = IXplatAbstractions.INSTANCE.getPatternsSavedInUi(serverPlayer);
             IXplatAbstractions.INSTANCE.sendPacketToPlayer(serverPlayer,
-                    new MsgOpenSpellGuiS2C(usedHand, patterns, vm.getImage().getStack(), new net.minecraft.nbt.CompoundTag(), 0));
+                    new MsgOpenSpellGuiS2C(usedHand, patterns, List.of(), new net.minecraft.nbt.CompoundTag(), 0));
         }
 
         player.awardStat(Stats.ITEM_USED.get(this));

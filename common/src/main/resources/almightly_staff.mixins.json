@@ -6,7 +6,8 @@
   "refmap": "almightly_staff.refmap.json",
   "client": [
     "MixinGuiSpellcasting",
-    "MixinMsgNewSpellPatternS2C"
+    "MixinMsgNewSpellPatternS2C",
+    "MixinScreen"
   ],
   "mixins": [
   ],

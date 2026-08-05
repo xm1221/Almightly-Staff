@@ -1,9 +1,15 @@
 package cn.xm1221.AlmightlyStaff.network;
 
+import at.petrak.hexcasting.api.casting.iota.*;
+import at.petrak.hexcasting.api.casting.math.HexPattern;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
+import cn.xm1221.AlmightlyStaff.gui.AlmightlyStaffIDEScreen;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import dev.architectury.networking.NetworkManager;
+import io.yukkuric.hexparse.misc.StringProcessors;
+import io.yukkuric.hexparse.parsers.ParserMain;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -13,136 +19,203 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
 
-/**
- * 使用 MC 1.21.1 CustomPacketPayload + Architectury NetworkManager 的跨平台网络。
- * 不使用任何弃用 API。
- */
+import java.util.ArrayList;
+import java.util.List;
+
 public class ModNetworking {
 
     public static void init() {
-        // C2S: scroll wheel
-        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgShiftScrollC2S.TYPE, MsgShiftScrollC2S.STREAM_CODEC,
-                (msg, ctx) -> msg.handle(ctx));
-        // C2S: mode key (V)
-        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgAlmightlyStaffModeC2S.TYPE, MsgAlmightlyStaffModeC2S.STREAM_CODEC,
-                (msg, ctx) -> msg.handle(ctx));
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgShiftScrollC2S.TYPE, MsgShiftScrollC2S.STREAM_CODEC, MsgShiftScrollC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgAlmightlyStaffModeC2S.TYPE, MsgAlmightlyStaffModeC2S.STREAM_CODEC, MsgAlmightlyStaffModeC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgStaffReadC2S.TYPE, MsgStaffReadC2S.STREAM_CODEC, MsgStaffReadC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgStaffWriteC2S.TYPE, MsgStaffWriteC2S.STREAM_CODEC, MsgStaffWriteC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgStaffCastC2S.TYPE, MsgStaffCastC2S.STREAM_CODEC, MsgStaffCastC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgStaffPageC2S.TYPE, MsgStaffPageC2S.STREAM_CODEC, MsgStaffPageC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgStaffEscapePatternC2S.TYPE, MsgStaffEscapePatternC2S.STREAM_CODEC, MsgStaffEscapePatternC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgParseToCodeC2S.TYPE, MsgParseToCodeC2S.STREAM_CODEC, MsgParseToCodeC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.c2s(), MsgParseToIotasC2S.TYPE, MsgParseToIotasC2S.STREAM_CODEC, MsgParseToIotasC2S::handle);
+        NetworkManager.registerReceiver(NetworkManager.s2c(), MsgStaffReadS2C.TYPE, MsgStaffReadS2C.STREAM_CODEC, MsgStaffReadS2C::handle);
+        NetworkManager.registerReceiver(NetworkManager.s2c(), MsgStaffEscapeResultS2C.TYPE, MsgStaffEscapeResultS2C.STREAM_CODEC, MsgStaffEscapeResultS2C::handle);
+        NetworkManager.registerReceiver(NetworkManager.s2c(), MsgParseToCodeS2C.TYPE, MsgParseToCodeS2C.STREAM_CODEC, MsgParseToCodeS2C::handle);
+        NetworkManager.registerReceiver(NetworkManager.s2c(), MsgParseToIotasS2C.TYPE, MsgParseToIotasS2C.STREAM_CODEC, MsgParseToIotasS2C::handle);
     }
 
-    // ==================== 滚轮翻页消息 ====================
+    public static void sendToServer(CustomPacketPayload p) { NetworkManager.sendToServer(p); }
+    public static void sendToPlayer(ServerPlayer player, CustomPacketPayload p) { NetworkManager.sendToPlayer(player, p); }
 
+    // nullable Iota stream codec helper
+    private static void writeIota(RegistryFriendlyByteBuf buf, Iota iota) {
+        buf.writeBoolean(iota != null);
+        if (iota != null) IotaType.TYPED_STREAM_CODEC.encode(buf, iota);
+    }
+    private static Iota readIota(RegistryFriendlyByteBuf buf) {
+        if (!buf.readBoolean()) return null;
+        try { return IotaType.TYPED_STREAM_CODEC.decode(buf); } catch (Exception e) { return null; }
+    }
+
+    // ==================== 滚轮翻页 ====================
     public static class MsgShiftScrollC2S implements CustomPacketPayload {
-        public static final CustomPacketPayload.Type<MsgShiftScrollC2S> TYPE =
-                new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "scroll"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, MsgShiftScrollC2S> STREAM_CODEC =
-                StreamCodec.of((buf, msg) -> msg.write(buf), MsgShiftScrollC2S::new);
-
-        private final double mainHandDelta;
-        private final double offHandDelta;
-        private final boolean invertSpellbook;
-        private final boolean invertAbacus;
-
-        public MsgShiftScrollC2S(double mainHandDelta, double offHandDelta,
-                                  boolean invertSpellbook, boolean invertAbacus) {
-            this.mainHandDelta = mainHandDelta;
-            this.offHandDelta = offHandDelta;
-            this.invertSpellbook = invertSpellbook;
-            this.invertAbacus = invertAbacus;
+        public static final Type<MsgShiftScrollC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "scroll"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgShiftScrollC2S> STREAM_CODEC = StreamCodec.of(
+                (buf, msg) -> { buf.writeDouble(msg.mainHandDelta); buf.writeDouble(msg.offHandDelta); buf.writeBoolean(msg.invertSpellbook); buf.writeBoolean(msg.invertAbacus); },
+                buf -> new MsgShiftScrollC2S(buf.readDouble(), buf.readDouble(), buf.readBoolean(), buf.readBoolean()));
+        final double mainHandDelta, offHandDelta;
+        final boolean invertSpellbook, invertAbacus;
+        public MsgShiftScrollC2S(double m, double o, boolean is, boolean ia) { mainHandDelta = m; offHandDelta = o; invertSpellbook = is; invertAbacus = ia; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgShiftScrollC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> { hfh(sp, InteractionHand.MAIN_HAND, msg.mainHandDelta, msg.invertSpellbook); hfh(sp, InteractionHand.OFF_HAND, msg.offHandDelta, msg.invertAbacus); });
         }
-
-        private MsgShiftScrollC2S(RegistryFriendlyByteBuf buf) {
-            this(buf.readDouble(), buf.readDouble(), buf.readBoolean(), buf.readBoolean());
-        }
-
-        private void write(RegistryFriendlyByteBuf buf) {
-            buf.writeDouble(mainHandDelta);
-            buf.writeDouble(offHandDelta);
-            buf.writeBoolean(invertSpellbook);
-            buf.writeBoolean(invertAbacus);
-        }
-
-        @Override
-        public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-
-        private void handle(NetworkManager.PacketContext context) {
-            var sender = context.getPlayer();
-            if (!(sender instanceof ServerPlayer sp)) return;
-            context.queue(() -> {
-                handleForHand(sp, InteractionHand.MAIN_HAND, mainHandDelta, invertSpellbook);
-                handleForHand(sp, InteractionHand.OFF_HAND, offHandDelta, invertAbacus);
-            });
-        }
-
-        private static void handleForHand(ServerPlayer sender, InteractionHand hand,
-                                           double delta, boolean invert) {
-            if (delta == 0) return;
-            var stack = sender.getItemInHand(hand);
-            if (!(stack.getItem() instanceof ItemAlmightlyStaff)) return;
-
+        private static void hfh(ServerPlayer sender, InteractionHand hand, double delta, boolean invert) {
+            if (delta == 0) return; var stack = sender.getItemInHand(hand); if (!(stack.getItem() instanceof ItemAlmightlyStaff)) return;
             if (invert) delta = -delta;
-
-            var newIdx = ItemAlmightlyStaff.rotatePageIdx(stack, delta < 0.0, sender.level());
-            var len = ItemAlmightlyStaff.highestPage(stack);
-            var sealed = ItemAlmightlyStaff.isSealed(stack);
-
-            MutableComponent component;
+            var ni = ItemAlmightlyStaff.rotatePageIdx(stack, delta < 0.0, sender.level()); var len = ItemAlmightlyStaff.highestPage(stack); var sealed = ItemAlmightlyStaff.isSealed(stack);
+            MutableComponent c; var iC = Component.literal(String.valueOf(ni)).withStyle(ChatFormatting.WHITE); var lC = Component.literal(String.valueOf(len)).withStyle(ChatFormatting.WHITE);
             if (hand == InteractionHand.OFF_HAND && stack.has(DataComponents.CUSTOM_NAME)) {
-                var rarityColor = stack.getHoverName().getStyle().getColor();
-                if (sealed) {
-                    component = Component.translatable("hexcasting.tooltip.spellbook.page_with_name.sealed",
-                        Component.literal(String.valueOf(newIdx)).withStyle(ChatFormatting.WHITE),
-                        Component.literal(String.valueOf(len)).withStyle(ChatFormatting.WHITE),
-                        Component.literal("").withStyle(style -> style.withItalic(true).withColor(rarityColor))
-                            .append(stack.getHoverName()),
-                        Component.translatable("hexcasting.tooltip.spellbook.sealed").withStyle(ChatFormatting.GOLD));
-                } else {
-                    component = Component.translatable("hexcasting.tooltip.spellbook.page_with_name",
-                        Component.literal(String.valueOf(newIdx)).withStyle(ChatFormatting.WHITE),
-                        Component.literal(String.valueOf(len)).withStyle(ChatFormatting.WHITE),
-                        Component.literal("").withStyle(style -> style.withItalic(true).withColor(rarityColor))
-                            .append(stack.getHoverName()));
-                }
-            } else {
-                if (sealed) {
-                    component = Component.translatable("hexcasting.tooltip.spellbook.page.sealed",
-                        Component.literal(String.valueOf(newIdx)).withStyle(ChatFormatting.WHITE),
-                        Component.literal(String.valueOf(len)).withStyle(ChatFormatting.WHITE),
-                        Component.translatable("hexcasting.tooltip.spellbook.sealed").withStyle(ChatFormatting.GOLD));
-                } else {
-                    component = Component.translatable("hexcasting.tooltip.spellbook.page",
-                        Component.literal(String.valueOf(newIdx)).withStyle(ChatFormatting.WHITE),
-                        Component.literal(String.valueOf(len)).withStyle(ChatFormatting.WHITE));
-                }
-            }
-            sender.displayClientMessage(component.withStyle(ChatFormatting.GRAY), true);
+                var rc = stack.getHoverName().getStyle().getColor();
+                c = sealed ? Component.translatable("hexcasting.tooltip.spellbook.page_with_name.sealed", iC, lC, Component.literal("").withStyle(st -> st.withItalic(true).withColor(rc)).append(stack.getHoverName()), Component.translatable("hexcasting.tooltip.spellbook.sealed").withStyle(ChatFormatting.GOLD))
+                    : Component.translatable("hexcasting.tooltip.spellbook.page_with_name", iC, lC, Component.literal("").withStyle(st -> st.withItalic(true).withColor(rc)).append(stack.getHoverName()));
+            } else c = sealed ? Component.translatable("hexcasting.tooltip.spellbook.page.sealed", iC, lC, Component.translatable("hexcasting.tooltip.spellbook.sealed").withStyle(ChatFormatting.GOLD))
+                : Component.translatable("hexcasting.tooltip.spellbook.page", iC, lC);
+            sender.displayClientMessage(c.withStyle(ChatFormatting.GRAY), true);
         }
     }
 
-    // ==================== 模式切换消息 ====================
-
+    // ==================== 模式切换 ====================
     public static class MsgAlmightlyStaffModeC2S implements CustomPacketPayload {
-        public static final CustomPacketPayload.Type<MsgAlmightlyStaffModeC2S> TYPE =
-                new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "mode"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, MsgAlmightlyStaffModeC2S> STREAM_CODEC =
-                StreamCodec.of((buf, msg) -> {}, buf -> new MsgAlmightlyStaffModeC2S());
-
-        @Override
-        public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
-            return TYPE;
+        public static final Type<MsgAlmightlyStaffModeC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "mode"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgAlmightlyStaffModeC2S> STREAM_CODEC = StreamCodec.of((buf, msg) -> {}, buf -> new MsgAlmightlyStaffModeC2S());
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgAlmightlyStaffModeC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> { var item = sp.getMainHandItem().getItem(); if (item instanceof ItemAlmightlyStaff stf) stf.casting(sp.level(), sp, InteractionHand.MAIN_HAND); });
         }
+    }
 
-        private void handle(NetworkManager.PacketContext context) {
-            var sender = context.getPlayer();
-            if (!(sender instanceof ServerPlayer sp)) return;
-            context.queue(() -> {
-                var item = sp.getMainHandItem().getItem();
-                if (item instanceof ItemAlmightlyStaff staff) {
-                    staff.casting(sp.level(), sp, InteractionHand.MAIN_HAND);
-                }
+    // ==================== IDE Read ====================
+    public static class MsgStaffReadC2S implements CustomPacketPayload {
+        public static final Type<MsgStaffReadC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "staff_read"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgStaffReadC2S> STREAM_CODEC = StreamCodec.of((buf, msg) -> {}, buf -> new MsgStaffReadC2S());
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgStaffReadC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> { var st = sp.getMainHandItem(); if (st.getItem() instanceof ItemAlmightlyStaff it) sendToPlayer(sp, new MsgStaffReadS2C(it.readIota(st))); });
+        }
+    }
+    public static class MsgStaffReadS2C implements CustomPacketPayload {
+        public static final Type<MsgStaffReadS2C> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "staff_read_s2c"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgStaffReadS2C> STREAM_CODEC = StreamCodec.of(
+                (buf, msg) -> ModNetworking.writeIota(buf, msg.iota), buf -> new MsgStaffReadS2C(ModNetworking.readIota(buf)));
+        final Iota iota; public MsgStaffReadS2C(Iota i) { this.iota = i; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgStaffReadS2C msg, NetworkManager.PacketContext ctx) { var s = Minecraft.getInstance().screen; if (s instanceof AlmightlyStaffIDEScreen ide) ide.onIotaReceived(msg.iota); }
+    }
+
+    // ==================== IDE Write ====================
+    public static class MsgStaffWriteC2S implements CustomPacketPayload {
+        public static final Type<MsgStaffWriteC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "staff_write"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgStaffWriteC2S> STREAM_CODEC = StreamCodec.of(
+                (buf, msg) -> ModNetworking.writeIota(buf, msg.iota), buf -> new MsgStaffWriteC2S(ModNetworking.readIota(buf)));
+        final Iota iota; public MsgStaffWriteC2S(Iota i) { this.iota = i; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgStaffWriteC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> { var st = sp.getMainHandItem(); if (st.getItem() instanceof ItemAlmightlyStaff it) it.writeDatum(st, msg.iota); });
+        }
+    }
+
+    // ==================== IDE Cast ====================
+    public static class MsgStaffCastC2S implements CustomPacketPayload {
+        public static final Type<MsgStaffCastC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "staff_cast"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgStaffCastC2S> STREAM_CODEC = StreamCodec.of((buf, msg) -> {}, buf -> new MsgStaffCastC2S());
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgStaffCastC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> { var st = sp.getMainHandItem(); if (st.getItem() instanceof ItemAlmightlyStaff it) it.casting(sp.level(), sp, InteractionHand.MAIN_HAND); });
+        }
+    }
+
+    // ==================== IDE Page ====================
+    public static class MsgStaffPageC2S implements CustomPacketPayload {
+        public static final Type<MsgStaffPageC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "staff_page"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgStaffPageC2S> STREAM_CODEC = StreamCodec.of((buf, msg) -> buf.writeInt(msg.delta), buf -> new MsgStaffPageC2S(buf.readInt()));
+        final int delta; public MsgStaffPageC2S(int d) { delta = d; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgStaffPageC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> { var st = sp.getMainHandItem(); if (st.getItem() instanceof ItemAlmightlyStaff) { ItemAlmightlyStaff.rotatePageIdx(st, msg.delta < 0, sp.level()); sendToPlayer(sp, new MsgStaffReadS2C(((ItemAlmightlyStaff) st.getItem()).readIota(st))); } });
+        }
+    }
+
+    // ==================== IDE Escape ====================
+    public static class MsgStaffEscapePatternC2S implements CustomPacketPayload {
+        public static final Type<MsgStaffEscapePatternC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "staff_esc_pat"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgStaffEscapePatternC2S> STREAM_CODEC = StreamCodec.of(
+                (buf, msg) -> { HexPattern.STREAM_CODEC.encode(buf, msg.pattern); }, buf -> new MsgStaffEscapePatternC2S(HexPattern.STREAM_CODEC.decode(buf)));
+        final HexPattern pattern; public MsgStaffEscapePatternC2S(HexPattern p) { pattern = p; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgStaffEscapePatternC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> { var st = sp.getMainHandItem(); if (st.getItem() instanceof ItemAlmightlyStaff it) { it.writeDatum(st, null); it.writeDatum(st, new PatternIota(msg.pattern)); it.casting(sp.level(), sp, InteractionHand.MAIN_HAND); sendToPlayer(sp, new MsgStaffEscapeResultS2C(it.readIota(st))); } });
+        }
+    }
+    public static class MsgStaffEscapeResultS2C implements CustomPacketPayload {
+        public static final Type<MsgStaffEscapeResultS2C> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "staff_esc_res"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgStaffEscapeResultS2C> STREAM_CODEC = StreamCodec.of(
+                (buf, msg) -> ModNetworking.writeIota(buf, msg.iota), buf -> new MsgStaffEscapeResultS2C(ModNetworking.readIota(buf)));
+        final Iota iota; public MsgStaffEscapeResultS2C(Iota i) { this.iota = i; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgStaffEscapeResultS2C msg, NetworkManager.PacketContext ctx) { var s = Minecraft.getInstance().screen; if (s instanceof AlmightlyStaffIDEScreen ide) ide.onEscapeResult(msg.iota); }
+    }
+
+    // ==================== HexParse Iotas→Code ====================
+    public static class MsgParseToCodeC2S implements CustomPacketPayload {
+        public static final Type<MsgParseToCodeC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "parse_to_code"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgParseToCodeC2S> STREAM_CODEC = StreamCodec.of(
+                (buf, msg) -> { IotaType.TYPED_STREAM_CODEC.encode(buf, new ListIota(new ArrayList<>(msg.iotas))); },
+                buf -> { var l = new ArrayList<Iota>(); try { var i = IotaType.TYPED_STREAM_CODEC.decode(buf); if (i instanceof ListIota li) for (var x : li.getList()) l.add(x); else if (i != null) l.add(i); } catch (Exception ignored) {} return new MsgParseToCodeC2S(l); });
+        final List<Iota> iotas; public MsgParseToCodeC2S(List<Iota> list) { iotas = list; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgParseToCodeC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> {
+                try {
+                    String code = ParserMain.ParseIotaNbt(new ListIota(new ArrayList<>(msg.iotas)), sp, StringProcessors.READ_DEFAULT);
+                    sendToPlayer(sp, new MsgParseToCodeS2C(code != null ? code : ""));
+                } catch (Exception e) { sendToPlayer(sp, new MsgParseToCodeS2C("")); }
             });
         }
+    }
+    public static class MsgParseToCodeS2C implements CustomPacketPayload {
+        public static final Type<MsgParseToCodeS2C> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "parse_to_code_s2c"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgParseToCodeS2C> STREAM_CODEC = StreamCodec.of((buf, msg) -> buf.writeUtf(msg.code), buf -> new MsgParseToCodeS2C(buf.readUtf()));
+        final String code; public MsgParseToCodeS2C(String c) { code = c; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgParseToCodeS2C msg, NetworkManager.PacketContext ctx) { var s = Minecraft.getInstance().screen; if (s instanceof AlmightlyStaffIDEScreen ide) ide.onParseCode(msg.code); }
+    }
+
+    // ==================== HexParse Code→Iotas ====================
+    public static class MsgParseToIotasC2S implements CustomPacketPayload {
+        public static final Type<MsgParseToIotasC2S> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "parse_to_iotas"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgParseToIotasC2S> STREAM_CODEC = StreamCodec.of((buf, msg) -> buf.writeUtf(msg.code), buf -> new MsgParseToIotasC2S(buf.readUtf()));
+        final String code; public MsgParseToIotasC2S(String c) { code = c; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgParseToIotasC2S msg, NetworkManager.PacketContext ctx) {
+            var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
+            ctx.queue(() -> {
+                try { Iota iota = ParserMain.ParseCode(msg.code, sp); sendToPlayer(sp, new MsgParseToIotasS2C(iota)); }
+                catch (Exception e) { sendToPlayer(sp, new MsgParseToIotasS2C(null)); }
+            });
+        }
+    }
+    public static class MsgParseToIotasS2C implements CustomPacketPayload {
+        public static final Type<MsgParseToIotasS2C> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "parse_to_iotas_s2c"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, MsgParseToIotasS2C> STREAM_CODEC = StreamCodec.of(
+                (buf, msg) -> ModNetworking.writeIota(buf, msg.iota), buf -> new MsgParseToIotasS2C(ModNetworking.readIota(buf)));
+        final Iota iota; public MsgParseToIotasS2C(Iota i) { this.iota = i; }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+        static void handle(MsgParseToIotasS2C msg, NetworkManager.PacketContext ctx) { var s = Minecraft.getInstance().screen; if (s instanceof AlmightlyStaffIDEScreen ide) ide.onParseResult(msg.iota); }
     }
 }

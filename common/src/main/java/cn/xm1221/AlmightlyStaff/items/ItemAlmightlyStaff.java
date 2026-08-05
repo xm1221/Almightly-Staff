@@ -17,8 +17,10 @@ import at.petrak.hexcasting.api.utils.MathUtils;
 import at.petrak.hexcasting.api.utils.MediaHelper;
 import at.petrak.hexcasting.api.utils.NBTHelper;
 import at.petrak.hexcasting.common.items.HexBaubleItem;
+import at.petrak.hexcasting.common.items.ItemStaff;
 import at.petrak.hexcasting.common.items.storage.ItemSpellbook;
 import at.petrak.hexcasting.common.lib.HexAttributes;
+import at.petrak.hexcasting.common.lib.HexItems;
 import at.petrak.hexcasting.common.lib.HexSounds;
 import at.petrak.hexcasting.common.msgs.MsgClearSpiralPatternsS2C;
 import at.petrak.hexcasting.common.msgs.MsgNewSpiralPatternsS2C;
@@ -26,6 +28,7 @@ import at.petrak.hexcasting.common.msgs.MsgOpenSpellGuiS2C;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -50,6 +53,7 @@ import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -72,6 +76,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     private static final DecimalFormat PERCENTAGE = new DecimalFormat("####");
 
+
     static {
         PERCENTAGE.setRoundingMode(RoundingMode.DOWN);
     }
@@ -86,31 +91,13 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     }
 
     @Override
+    public boolean canAttackBlock(BlockState state, Level level, BlockPos pos, Player player) {
+        return false;
+    }
+
+    @Override
     public @NotNull InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand usedHand) {
-        ItemStack stack = player.getItemInHand(usedHand);
-        if (player.getAttributeValue(HexAttributes.FEEBLE_MIND) > 0) {
-            return InteractionResultHolder.fail(stack);
-        }
-        if (player.isShiftKeyDown()) {
-            if (world.isClientSide()) {
-                player.playSound(HexSounds.STAFF_RESET, 1f, 1f);
-            } else if (player instanceof ServerPlayer serverPlayer) {
-                IXplatAbstractions.INSTANCE.clearCastingData(serverPlayer);
-                var packet = new MsgClearSpiralPatternsS2C(player.getUUID());
-                IXplatAbstractions.INSTANCE.sendPacketToPlayer(serverPlayer, packet);
-                IXplatAbstractions.INSTANCE.sendPacketTracking(serverPlayer, packet);
-            }
-        }
-
-        if (!world.isClientSide() && player instanceof ServerPlayer serverPlayer) {
-            var vm = IXplatAbstractions.INSTANCE.getStaffcastVM(serverPlayer, usedHand);
-            var patterns = IXplatAbstractions.INSTANCE.getPatternsSavedInUi(serverPlayer);
-            IXplatAbstractions.INSTANCE.sendPacketToPlayer(serverPlayer,
-                    new MsgOpenSpellGuiS2C(usedHand, patterns, new ArrayList<>(vm.getImage().getStack()), new net.minecraft.nbt.CompoundTag(), 0));
-        }
-
-        player.awardStat(Stats.ITEM_USED.get(this));
-        return InteractionResultHolder.success(stack);
+        return HexItems.STAFF_BAMBOO.get().use(world, player, usedHand);
     }
 
     /** 按 V 键时由服务端调用，直接施放当前页法术 */

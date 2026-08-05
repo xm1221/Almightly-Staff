@@ -7,6 +7,13 @@ architectury {
     neoForge()
 }
 
+// 让 loom 在 NeoForge remapJar 阶段把 refmap 从 named:intermediary 重映射为 SRG
+loom {
+    mixin {
+        useLegacyMixinAp.set(true)
+        defaultRefmapName.set("almightly_staff.refmap.json")
+    }
+}
 
 configurations {
     common {

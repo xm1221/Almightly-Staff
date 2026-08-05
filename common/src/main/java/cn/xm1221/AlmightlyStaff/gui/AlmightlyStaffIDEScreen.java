@@ -99,7 +99,9 @@ public class AlmightlyStaffIDEScreen extends Screen {
     }
 
     @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g, mx, my, pt);
+        // 1.21.1 的 renderBackground 会触发全屏模糊后处理（renderBlurredBackground），
+        // 覆盖整个 IDE 导致界面发糊。这里改画不透明底色，保持清晰。
+        g.fill(0, 0, width, height, 0xFF101018);
         int lt = TOP_H + 2, lb = height - BOT_H - 2, ilx = lx(), ilw = lw();
 
         g.fill(0, 0, width, TOP_H, 0xCC_222222);

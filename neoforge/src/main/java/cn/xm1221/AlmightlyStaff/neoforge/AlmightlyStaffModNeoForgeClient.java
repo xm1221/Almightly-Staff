@@ -9,6 +9,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 import static at.petrak.hexcasting.api.HexAPI.modLoc;
@@ -18,6 +19,13 @@ import static at.petrak.hexcasting.api.HexAPI.modLoc;
  * 参照 HexMod 的 ForgeHexClientInitializer。
  */
 public class AlmightlyStaffModNeoForgeClient {
+
+    /** 按键必须在这里注册（RegisterKeyMappingsEvent 早于 FMLClientSetupEvent）。 */
+    @SubscribeEvent
+    public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
+        event.register(AlmightlyStaffKeybinds.MODE_KEY);
+        event.register(AlmightlyStaffKeybinds.IDE_KEY);
+    }
 
     @SubscribeEvent
     public static void clientInit(FMLClientSetupEvent evt) {
@@ -43,7 +51,7 @@ public class AlmightlyStaffModNeoForgeClient {
             e.setCanceled(cancel);
         });
 
-        // 注册按键绑定
-        AlmightlyStaffKeybinds.init();
+        // 按键点击处理（按键映射已在上方 RegisterKeyMappingsEvent 注册）
+        AlmightlyStaffKeybinds.initTick();
     }
 }

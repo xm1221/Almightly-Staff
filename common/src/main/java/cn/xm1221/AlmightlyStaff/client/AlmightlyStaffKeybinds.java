@@ -27,10 +27,14 @@ public class AlmightlyStaffKeybinds {
         CATEGORY
     );
 
-    public static void init() {
+    /** 仅注册按键映射本身（Fabric 用 KeyMappingRegistry；NeoForge 用 RegisterKeyMappingsEvent）。 */
+    public static void registerBindings() {
         KeyMappingRegistry.register(MODE_KEY);
         KeyMappingRegistry.register(IDE_KEY);
+    }
 
+    /** 注册 tick 监听（按键点击处理 + 滚轮累积）。跨平台共用。 */
+    public static void initTick() {
         ClientTickEvent.CLIENT_POST.register(instance -> {
             if (Minecraft.getInstance().player == null) return;
             if (MODE_KEY.consumeClick()) {

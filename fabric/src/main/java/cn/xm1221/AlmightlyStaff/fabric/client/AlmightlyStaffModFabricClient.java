@@ -25,6 +25,7 @@ public final class AlmightlyStaffModFabricClient implements ClientModInitializer
         MouseScrollCallback.EVENT.register(ShiftScrollListener::onScrollInGameplay);
 
         // 注册按键绑定和 client tick（V 键切换模式 + 滚轮数据发送）
-        AlmightlyStaffKeybinds.init();
+        AlmightlyStaffKeybinds.registerBindings();
+        AlmightlyStaffKeybinds.initTick();
     }
 }

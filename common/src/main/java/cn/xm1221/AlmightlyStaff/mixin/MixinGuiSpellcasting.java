@@ -2,6 +2,7 @@ package cn.xm1221.AlmightlyStaff.mixin;
 
 import at.petrak.hexcasting.api.casting.eval.ResolvedPattern;
 import at.petrak.hexcasting.api.casting.eval.ResolvedPatternType;
+import net.minecraft.client.gui.GuiGraphics;
 import at.petrak.hexcasting.api.casting.math.HexCoord;
 import at.petrak.hexcasting.api.casting.math.HexPattern;
 import at.petrak.hexcasting.client.gui.GuiSpellcasting;
@@ -42,6 +43,18 @@ public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
             return !ideWriteMode; // write=拦截, cast=放行
         }
         return true;
+    }
+
+    // IDE 内嵌渲染时，GuiSpellcasting.render() 会调用 Screen.renderBackground()
+    // -> renderBlurredBackground() 全屏模糊。WrapWithCondition 拦截它，IDE 模式下跳过。
+    @WrapWithCondition(
+        method = "render",
+        at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/screens/Screen;renderBackground(Lnet/minecraft/client/gui/GuiGraphics;IIF)V"),
+        remap = false
+    )
+    private boolean ide$skipBackground(GuiGraphics g, int mx, int my, float pt) {
+        return onDrawPattern$ide == null; // IDE 内嵌时跳过背景（含模糊）
     }
 
     @Override @Nullable public BiConsumer<HexPattern, Integer> getOnDrawPattern$ide() { return onDrawPattern$ide; }

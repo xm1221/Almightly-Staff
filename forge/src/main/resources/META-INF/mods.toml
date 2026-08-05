@@ -16,7 +16,7 @@ description = '''
 [[dependencies.almightly_staff]]
 modId = "forge"
 mandatory = true
-versionRange = "[47.4.10,)"
+versionRange = "[47.4.0,)"
 ordering = "NONE"
 side = "BOTH"
 

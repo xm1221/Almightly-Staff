@@ -25,6 +25,7 @@ import at.petrak.hexcasting.common.msgs.MsgOpenSpellGuiS2C;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.level.ServerLevel;
@@ -41,6 +42,7 @@ import net.minecraft.world.entity.animal.allay.Allay;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -75,10 +77,14 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     public static final String BAR_COLOR="bar_color";
 
-
     @Override
     public @NotNull UseAnim getUseAnimation(ItemStack pStack) {
         return UseAnim.BLOCK;
+    }
+
+    @Override
+    public boolean canAttackBlock(BlockState state, Level level, BlockPos pos, Player player) {
+        return false;
     }
 
     @Override
@@ -237,7 +243,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     }
 
     @Override
-    public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(EquipmentSlot slot) {
+    public @NotNull Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(EquipmentSlot slot) {
         var out = HashMultimap.create(super.getDefaultAttributeModifiers(slot));
         if ( slot == EquipmentSlot.MAINHAND || slot == EquipmentSlot.OFFHAND) {
             out.put(HexAttributes.GRID_ZOOM, GRID_ZOOM);

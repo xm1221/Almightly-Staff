@@ -50,7 +50,8 @@ public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
     @WrapWithCondition(
         method = "render",
         at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/gui/screens/Screen;renderBackground(Lnet/minecraft/client/gui/GuiGraphics;IIF)V"),
+            target = "Lnet/minecraft/client/gui/screens/Screen;renderBackground(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
+            remap = true), // Screen 是 Minecraft 类，需经 refmap 映射到 SRG
         remap = false
     )
     private boolean ide$skipBackground(GuiGraphics g, int mx, int my, float pt) {

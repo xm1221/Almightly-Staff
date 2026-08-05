@@ -2,15 +2,30 @@ architectury {
     common rootProject.enabled_platforms.split(',')
 }
 
+// Loom 1.13 默认禁用 mixin annotation processor；开启它生成 refmap
+loom {
+    mixin {
+        useLegacyMixinAp.set(true)
+        defaultRefmapName.set("almightly_staff.refmap.json")
+    }
+}
+
 dependencies {
     // We depend on Fabric Loader here to use the Fabric @Environment annotations,
     // which get remapped to the correct annotations on each platform.
     // Do NOT use other classes from Fabric Loader.
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
+    // Minecraft + 映射：mixin annotation processor 需要它们解析类/方法以生成 refmap
+    minecraft "net.minecraft:minecraft:$rootProject.minecraft_version"
+    mappings loom.officialMojangMappings()
+
     // Architectury API. This is optional, and you can comment it out if you don't need it.
     modImplementation "dev.architectury:architectury:$rootProject.architectury_api_version"
     modImplementation fileTree(dir: "libs", include: '*.jar')
+
+    // mixin annotation processor：为 common 的 mixin 生成 refmap（Mojang 名 → 运行时名）
+    annotationProcessor "org.spongepowered:mixin:0.8.7:processor"
 
 }
 compileKotlin {

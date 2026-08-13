@@ -62,7 +62,7 @@ public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
     @Override public int patternCount$ide() { return patterns.size(); }
     @Override public void setIdeWriteMode$ide(boolean w) { ideWriteMode = w; }
     @Override public void setCastCollectMode$ide(boolean m) { castCollectMode$ide = m; }
-    @Override public void setStackClear$ide() { if (cachedStack != null) cachedStack.clear(); }
+    @Override public void setStackClear$ide() { cachedStack = new ArrayList<>(); }
     /** 1.21.1 的 cachedStack 是 List<? extends Iota>；序列化为 NBT 标签返回（客户端不解反序列化）。 */
     @Override public List<CompoundTag> getStack$ide() {
         List<CompoundTag> out = new ArrayList<>();

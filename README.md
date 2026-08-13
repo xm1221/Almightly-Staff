@@ -87,6 +87,6 @@ CyberStaff 风格三栏布局：
 产物：`fabric/build/libs/almightly_staff-fabric-<version>.jar`（若 `build` 报 test 任务错误，用 `assemble` 跳过 test/check）。
 
 ## 致谢
-- GUI 布局与交互参考 [Hex CyberStaff](https://github.com/batchpacket/Hex-CyberStaff)（Aurover）
+- GUI 布局与交互参考 Hex CyberStaff（Aurover）
 - Parse 编辑器光标方案与施法栈访问参考 HexGuide
 - 卓越法术检查与图案获取基于 HexParse（yukkuric）

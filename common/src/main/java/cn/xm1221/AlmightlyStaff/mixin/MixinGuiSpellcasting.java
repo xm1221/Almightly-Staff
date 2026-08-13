@@ -20,14 +20,20 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
+/**
+ * 让 GuiSpellcasting 可被法术库绘制流程复用：
+ * 拦截 drawEnd 的封包发送，改为本地回调捕获已绘制图案。
+ */
 @Mixin(GuiSpellcasting.class)
 public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
 
     @Shadow(remap = false) private List<ResolvedPattern> patterns;
     @Shadow(remap = false) private Set<HexCoord> usedSpots;
+    @Shadow(remap = false) private List<net.minecraft.nbt.CompoundTag> cachedStack;
 
     @Unique @Nullable private BiConsumer<HexPattern, Integer> onDrawPattern$ide;
     @Unique private boolean ideWriteMode = true;
+    @Unique private boolean castCollectMode$ide = false;
 
     @WrapWithCondition(
         method = "drawEnd",
@@ -39,7 +45,7 @@ public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
     private boolean redirectPattern$ide(IClientXplatAbstractions inst, IMessage msg) {
         if (onDrawPattern$ide != null && msg instanceof MsgNewSpellPatternC2S s) {
             onDrawPattern$ide.accept(s.pattern(), s.resolvedPatterns().size() - 1);
-            return !ideWriteMode; // write=t拦截, cast=f放行
+            return !ideWriteMode; // write=true 拦截, cast=false 放行
         }
         return true;
     }
@@ -50,4 +56,7 @@ public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
     @Override public void setPatternType$ide(int index, ResolvedPatternType type) { if (index >= 0 && index < patterns.size()) patterns.get(index).setType(type); }
     @Override public int patternCount$ide() { return patterns.size(); }
     @Override public void setIdeWriteMode$ide(boolean w) { ideWriteMode = w; }
+    @Override public void setCastCollectMode$ide(boolean m) { castCollectMode$ide = m; }
+    @Override public void setStackClear$ide() { cachedStack = new java.util.ArrayList<>(); }
+    @Override public List<net.minecraft.nbt.CompoundTag> getStack$ide() { return cachedStack == null ? List.of() : cachedStack; }
 }

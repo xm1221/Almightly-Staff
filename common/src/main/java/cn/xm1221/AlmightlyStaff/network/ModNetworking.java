@@ -15,13 +15,16 @@ import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import dev.architectury.networking.NetworkChannel;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import at.petrak.hexcasting.common.lib.hex.HexIotaTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +49,18 @@ public class ModNetworking {
         CHANNEL.register(MsgParseToCodeS2C.class, MsgParseToCodeS2C::encode, MsgParseToCodeS2C::decode, MsgParseToCodeS2C::handle);
         CHANNEL.register(MsgParseToIotasC2S.class, MsgParseToIotasC2S::encode, MsgParseToIotasC2S::decode, MsgParseToIotasC2S::handle);
         CHANNEL.register(MsgParseToIotasS2C.class, MsgParseToIotasS2C::encode, MsgParseToIotasS2C::decode, MsgParseToIotasS2C::handle);
+        // ---- 法术库 ----
+        CHANNEL.register(MsgStaffLibReadC2S.class, MsgStaffLibReadC2S::encode, MsgStaffLibReadC2S::decode, MsgStaffLibReadC2S::handle);
+        CHANNEL.register(MsgStaffLibSyncS2C.class, MsgStaffLibSyncS2C::encode, MsgStaffLibSyncS2C::decode, MsgStaffLibSyncS2C::handle);
+        CHANNEL.register(MsgStaffPageRenameC2S.class, MsgStaffPageRenameC2S::encode, MsgStaffPageRenameC2S::decode, MsgStaffPageRenameC2S::handle);
+        CHANNEL.register(MsgStaffPageSetIotaC2S.class, MsgStaffPageSetIotaC2S::encode, MsgStaffPageSetIotaC2S::decode, MsgStaffPageSetIotaC2S::handle);
+        CHANNEL.register(MsgStaffPageAppendIotaC2S.class, MsgStaffPageAppendIotaC2S::encode, MsgStaffPageAppendIotaC2S::decode, MsgStaffPageAppendIotaC2S::handle);
+        CHANNEL.register(MsgStaffPageSwapC2S.class, MsgStaffPageSwapC2S::encode, MsgStaffPageSwapC2S::decode, MsgStaffPageSwapC2S::handle);
+        CHANNEL.register(MsgStaffPageSelectC2S.class, MsgStaffPageSelectC2S::encode, MsgStaffPageSelectC2S::decode, MsgStaffPageSelectC2S::handle);
+        CHANNEL.register(MsgStaffPageWriteC2S.class, MsgStaffPageWriteC2S::encode, MsgStaffPageWriteC2S::decode, MsgStaffPageWriteC2S::handle);
+        CHANNEL.register(MsgStaffGreatSpellCheckC2S.class, MsgStaffGreatSpellCheckC2S::encode, MsgStaffGreatSpellCheckC2S::decode, MsgStaffGreatSpellCheckC2S::handle);
+        CHANNEL.register(MsgStaffGreatSpellCheckS2C.class, MsgStaffGreatSpellCheckS2C::encode, MsgStaffGreatSpellCheckS2C::decode, MsgStaffGreatSpellCheckS2C::handle);
+        CHANNEL.register(MsgStaffCastClearStackC2S.class, MsgStaffCastClearStackC2S::encode, MsgStaffCastClearStackC2S::decode, MsgStaffCastClearStackC2S::handle);
     }
 
     // ---- 滚轮翻页 ----
@@ -96,7 +111,7 @@ public class ModNetworking {
     public record MsgStaffReadS2C(Iota iota) {
         public static void encode(MsgStaffReadS2C m, FriendlyByteBuf b) { b.writeBoolean(m.iota != null); if (m.iota != null) b.writeNbt(IotaType.serialize(m.iota)); }
         public static MsgStaffReadS2C decode(FriendlyByteBuf b) { if (!b.readBoolean()) return new MsgStaffReadS2C(null); try { return new MsgStaffReadS2C(IotaType.deserialize(b.readNbt(), null)); } catch (Exception e) { return new MsgStaffReadS2C(null); } }
-        public static void handle(MsgStaffReadS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.AlmightlyStaffIDEScreen ide) ide.onIotaReceived(m.iota); }
+        public static void handle(MsgStaffReadS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = Minecraft.getInstance().screen;  }
     }
     public record MsgStaffWriteC2S(Iota iota) {
         public static void encode(MsgStaffWriteC2S m, FriendlyByteBuf b) { b.writeBoolean(m.iota != null); if (m.iota != null) b.writeNbt(IotaType.serialize(m.iota)); }
@@ -118,23 +133,326 @@ public class ModNetworking {
     public record MsgStaffEscapeResultS2C(Iota iota) {
         public static void encode(MsgStaffEscapeResultS2C m, FriendlyByteBuf b) { b.writeBoolean(m.iota != null); if (m.iota != null) b.writeNbt(IotaType.serialize(m.iota)); }
         public static MsgStaffEscapeResultS2C decode(FriendlyByteBuf b) { if (!b.readBoolean()) return new MsgStaffEscapeResultS2C(null); try { return new MsgStaffEscapeResultS2C(IotaType.deserialize(b.readNbt(), null)); } catch (Exception e) { return new MsgStaffEscapeResultS2C(null); } }
-        public static void handle(MsgStaffEscapeResultS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.AlmightlyStaffIDEScreen ide) ide.onEscapeResult(m.iota); }
+        public static void handle(MsgStaffEscapeResultS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = Minecraft.getInstance().screen;  }
     }
 
     // ---- HexParse ----
-    public record MsgParseToCodeC2S(List<Iota> iotas) {
-        public static void encode(MsgParseToCodeC2S m, FriendlyByteBuf b) { b.writeNbt(IotaType.serialize(new ListIota(new ArrayList<>(m.iotas)))); }
-        public static MsgParseToCodeC2S decode(FriendlyByteBuf b) { try { var i = IotaType.deserialize(b.readNbt(), null); var l = new ArrayList<Iota>(); if (i instanceof ListIota li) for (var x : li.getList()) l.add(x); else if (i != null) l.add(i); return new MsgParseToCodeC2S(l); } catch (Exception e) { return new MsgParseToCodeC2S(List.of()); } }
+    /** 代码请求：携带客户端组装好的 ListIota 原始 NBT，服务端直接解析。 */
+    public record MsgParseToCodeC2S(CompoundTag listNbt) {
+        public static void encode(MsgParseToCodeC2S m, FriendlyByteBuf b) { if (m.listNbt != null) b.writeNbt(m.listNbt); }
+        public static MsgParseToCodeC2S decode(FriendlyByteBuf b) { return new MsgParseToCodeC2S(b.readNbt()); }
         public static void handle(MsgParseToCodeC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
             ctx.get().queue(() -> {
-                var tag = IotaType.serialize(new ListIota(new ArrayList<>(m.iotas)));
-                try { String code = io.yukkuric.hexparse.parsers.ParserMain.ParseIotaNbt(tag, s, x -> x); CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C(code)); }
+                try { String code = io.yukkuric.hexparse.parsers.ParserMain.ParseIotaNbt(m.listNbt, s, x -> x); CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C(code)); }
                 catch (Exception e) { CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C("")); }
             });
         }
     }
-    public record MsgParseToCodeS2C(String code) { public static void encode(MsgParseToCodeS2C m, FriendlyByteBuf b) { b.writeUtf(m.code); } public static MsgParseToCodeS2C decode(FriendlyByteBuf b) { return new MsgParseToCodeS2C(b.readUtf()); } public static void handle(MsgParseToCodeS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.AlmightlyStaffIDEScreen ide) ide.onParseCode(m.code); } }
+    public record MsgParseToCodeS2C(String code) { public static void encode(MsgParseToCodeS2C m, FriendlyByteBuf b) { b.writeUtf(m.code); } public static MsgParseToCodeS2C decode(FriendlyByteBuf b) { return new MsgParseToCodeS2C(b.readUtf()); } public static void handle(MsgParseToCodeS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { Minecraft.getInstance().execute(() -> { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr) scr.onParseCode(m.code); }); } }
     public record MsgParseToIotasC2S(String code) { public static void encode(MsgParseToIotasC2S m, FriendlyByteBuf b) { b.writeUtf(m.code); } public static MsgParseToIotasC2S decode(FriendlyByteBuf b) { return new MsgParseToIotasC2S(b.readUtf()); } public static void handle(MsgParseToIotasC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return; ctx.get().queue(() -> { try { var tag = io.yukkuric.hexparse.parsers.ParserMain.ParseCode(m.code, s); CHANNEL.sendToPlayer(s, new MsgParseToIotasS2C(IotaType.deserialize(tag, s.serverLevel()))); } catch (Exception e) { CHANNEL.sendToPlayer(s, new MsgParseToIotasS2C(null)); } }); } }
-    public record MsgParseToIotasS2C(Iota iota) { public static void encode(MsgParseToIotasS2C m, FriendlyByteBuf b) { b.writeBoolean(m.iota != null); if (m.iota != null) b.writeNbt(IotaType.serialize(m.iota)); } public static MsgParseToIotasS2C decode(FriendlyByteBuf b) { if (!b.readBoolean()) return new MsgParseToIotasS2C(null); try { return new MsgParseToIotasS2C(IotaType.deserialize(b.readNbt(), null)); } catch (Exception e) { return new MsgParseToIotasS2C(null); } } public static void handle(MsgParseToIotasS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.AlmightlyStaffIDEScreen ide) ide.onParseResult(m.iota); } }
+    public record MsgParseToIotasS2C(Iota iota) { public static void encode(MsgParseToIotasS2C m, FriendlyByteBuf b) { b.writeBoolean(m.iota != null); if (m.iota != null) b.writeNbt(IotaType.serialize(m.iota)); } public static MsgParseToIotasS2C decode(FriendlyByteBuf b) { if (!b.readBoolean()) return new MsgParseToIotasS2C(null); try { return new MsgParseToIotasS2C(IotaType.deserialize(b.readNbt(), null)); } catch (Exception e) { return new MsgParseToIotasS2C(null); } } public static void handle(MsgParseToIotasS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { Minecraft.getInstance().execute(() -> { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffParseScreen scr) scr.onParseResult(m.iota); }); } }
+
+    // ==================== 法术库（页同步） ====================
+    public record PageData(int pageIndex, String name, List<CompoundTag> iotas) {
+        public PageData { iotas = iotas == null ? new ArrayList<>() : new ArrayList<>(iotas); }
+    }
+
+    /** 客户端由 iota 原始 NBT 标签组装 ListIota 的序列化标签（反序列化在服务端）。 */
+    public static CompoundTag buildListTag(List<CompoundTag> tags) {
+        CompoundTag out = new CompoundTag();
+        out.putString(HexIotaTypes.KEY_TYPE, HexIotaTypes.REGISTRY.getKey(HexIotaTypes.LIST).toString());
+        ListTag items = new ListTag();
+        for (CompoundTag t : tags) if (t != null) items.add(t);
+        out.put(HexIotaTypes.KEY_DATA, items);
+        return out;
+    }
+
+    /** 服务端反序列化页内 iota（可解析实体），返回原始序列化 NBT 标签；客户端不做反序列化。 */
+    private static List<CompoundTag> readPageIotaTags(ItemStack stack, int pageIndex, net.minecraft.server.level.ServerLevel level) {
+        var pages = at.petrak.hexcasting.api.utils.NBTHelper.getCompound(stack, at.petrak.hexcasting.common.items.storage.ItemSpellbook.TAG_PAGES);
+        List<CompoundTag> list = new ArrayList<>();
+        if (pages != null && pages.contains(String.valueOf(pageIndex), net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            try {
+                Iota i = IotaType.deserialize(pages.getCompound(String.valueOf(pageIndex)), level);
+                if (i instanceof ListIota li) { for (var x : li.getList()) list.add(IotaType.serialize(x)); }
+                else if (i != null) list.add(IotaType.serialize(i));
+            } catch (Exception ignored) { }
+        }
+        return list;
+    }
+
+    private static String pageName(ItemStack stack, int pageIndex) {
+        var names = at.petrak.hexcasting.api.utils.NBTHelper.getCompound(stack, at.petrak.hexcasting.common.items.storage.ItemSpellbook.TAG_PAGE_NAMES);
+        if (names == null) return "";
+        String json = names.getString(String.valueOf(pageIndex));
+        if (json.isEmpty()) return "";
+        try { return Component.Serializer.fromJson(json).getString(); } catch (Exception e) { return ""; }
+    }
+
+    private static void setPageName(ItemStack stack, int pageIndex, String name) {
+        var names = at.petrak.hexcasting.api.utils.NBTHelper.getOrCreateCompound(stack, at.petrak.hexcasting.common.items.storage.ItemSpellbook.TAG_PAGE_NAMES);
+        String key = String.valueOf(pageIndex);
+        if (name == null || name.isBlank()) names.remove(key);
+        else names.putString(key, Component.Serializer.toJson(Component.literal(name)));
+        if (names.isEmpty()) at.petrak.hexcasting.api.utils.NBTHelper.remove(stack, at.petrak.hexcasting.common.items.storage.ItemSpellbook.TAG_PAGE_NAMES);
+    }
+
+    private static void selectPage(ItemStack stack, int pageIndex) {
+        at.petrak.hexcasting.api.utils.NBTHelper.putInt(stack, at.petrak.hexcasting.common.items.storage.ItemSpellbook.TAG_SELECTED_PAGE, Math.max(1, pageIndex));
+        String name = pageName(stack, pageIndex);
+        if (!name.isEmpty()) stack.setHoverName(Component.literal(name));
+        else stack.resetHoverName();
+    }
+
+    /** 服务端反序列化原始标签后写入页面。 */
+    private static void writePageIotaList(ItemStack stack, int pageIndex, List<CompoundTag> tags, net.minecraft.server.level.ServerLevel level) {
+        selectPage(stack, pageIndex);
+        var item = (ItemAlmightlyStaff) stack.getItem();
+        if (tags == null || tags.isEmpty()) { item.writeDatum(stack, null); return; }
+        List<Iota> iotas = new ArrayList<>();
+        for (CompoundTag t : tags) {
+            try { Iota i = IotaType.deserialize(t, level); if (i != null) iotas.add(i); } catch (Exception ignored) { }
+        }
+        item.writeDatum(stack, new ListIota(iotas));
+    }
+
+    private static List<PageData> buildPages(ItemStack stack, net.minecraft.server.level.ServerLevel level) {
+        List<PageData> pages = new ArrayList<>();
+        for (int i = 1; i <= 64; i++) {
+            List<CompoundTag> iotas = readPageIotaTags(stack, i, level);
+            String name = pageName(stack, i);
+            if (iotas.isEmpty() && name.isEmpty()) continue;
+            pages.add(new PageData(i, name, iotas));
+        }
+        return pages;
+    }
+
+    /** 单页序列化后的字节数（用与真实编码一致的写法精确测量）。 */
+    private static int pageBytes(PageData p) {
+        FriendlyByteBuf tmp = new FriendlyByteBuf(io.netty.buffer.Unpooled.buffer(256));
+        try {
+            tmp.writeInt(p.pageIndex());
+            tmp.writeUtf(p.name());
+            tmp.writeInt(p.iotas().size());
+            for (CompoundTag t : p.iotas()) if (t != null) tmp.writeNbt(t);
+            return tmp.readableBytes();
+        } catch (Exception e) {
+            return 4096;
+        } finally {
+            tmp.release();
+        }
+    }
+
+    /** 分块同步：按字节分批，单包 ≤ 20000 字节（1.20.1 custom payload 上限 32767）。 */
+    private static void sendSync(ServerPlayer s, ItemStack stack) {
+        List<PageData> all = buildPages(stack, s.serverLevel());
+        int selected = at.petrak.hexcasting.common.items.storage.ItemSpellbook.getPage(stack, 1);
+        final int MAX_BYTES = 20000;
+        List<PageData> batch = new ArrayList<>();
+        int batchBytes = 4; // selectedPage int
+        for (PageData p : all) {
+            int pb = pageBytes(p);
+            if (!batch.isEmpty() && batchBytes + pb > MAX_BYTES) {
+                CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), selected, false));
+                batch.clear();
+                batchBytes = 4;
+            }
+            batch.add(p);
+            batchBytes += pb;
+        }
+        if (!batch.isEmpty() || all.isEmpty()) {
+            CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), selected, true));
+        }
+    }
+
+    private static ItemStack staffInMainHand(ServerPlayer s) {
+        var st = s.getMainHandItem();
+        return st.getItem() instanceof ItemAlmightlyStaff ? st : null;
+    }
+
+    public record MsgStaffLibReadC2S() {
+        public static void encode(MsgStaffLibReadC2S m, FriendlyByteBuf b) {}
+        public static MsgStaffLibReadC2S decode(FriendlyByteBuf b) { return new MsgStaffLibReadC2S(); }
+        public static void handle(MsgStaffLibReadC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) sendSync(s, st); });
+        }
+    }
+    public record MsgStaffLibSyncS2C(List<PageData> pages, int selectedPage, boolean lastChunk) {
+        public static void encode(MsgStaffLibSyncS2C m, FriendlyByteBuf b) {
+            b.writeInt(m.pages.size());
+            for (PageData p : m.pages) {
+                b.writeInt(p.pageIndex); b.writeUtf(p.name);
+                b.writeInt(p.iotas.size());
+                for (CompoundTag t : p.iotas) if (t != null) b.writeNbt(t);
+            }
+            b.writeInt(m.selectedPage);
+            b.writeBoolean(m.lastChunk);
+        }
+        public static MsgStaffLibSyncS2C decode(FriendlyByteBuf b) {
+            int n = b.readInt(); List<PageData> pages = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                int idx = b.readInt(); String name = b.readUtf();
+                int c = b.readInt(); List<CompoundTag> iotas = new ArrayList<>();
+                for (int j = 0; j < c; j++) {
+                    CompoundTag tag = b.readNbt();
+                    if (tag != null) iotas.add(tag);
+                }
+                pages.add(new PageData(idx, name, iotas));
+            }
+            return new MsgStaffLibSyncS2C(pages, b.readInt(), b.readBoolean());
+        }
+        public static void handle(MsgStaffLibSyncS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            Minecraft.getInstance().execute(() -> {
+                var s = Minecraft.getInstance().screen;
+                if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr) scr.onSyncChunk(m.pages, m.selectedPage, m.lastChunk);
+            });
+        }
+    }
+    public record MsgStaffPageRenameC2S(int pageIndex, String name) {
+        public static void encode(MsgStaffPageRenameC2S m, FriendlyByteBuf b) { b.writeInt(m.pageIndex); b.writeUtf(m.name); }
+        public static MsgStaffPageRenameC2S decode(FriendlyByteBuf b) { return new MsgStaffPageRenameC2S(b.readInt(), b.readUtf()); }
+        public static void handle(MsgStaffPageRenameC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) { setPageName(st, m.pageIndex, m.name); sendSync(s, st); } });
+        }
+    }
+    public record MsgStaffPageSetIotaC2S(int pageIndex, int slotIndex, CompoundTag iotaTag) {
+        public static void encode(MsgStaffPageSetIotaC2S m, FriendlyByteBuf b) { b.writeInt(m.pageIndex); b.writeInt(m.slotIndex); b.writeBoolean(m.iotaTag != null); if (m.iotaTag != null) b.writeNbt(m.iotaTag); }
+        public static MsgStaffPageSetIotaC2S decode(FriendlyByteBuf b) { int p = b.readInt(); int s = b.readInt(); CompoundTag t = null; if (b.readBoolean()) t = b.readNbt(); return new MsgStaffPageSetIotaC2S(p, s, t); }
+        public static void handle(MsgStaffPageSetIotaC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                var st = staffInMainHand(s); if (st == null) return;
+                List<CompoundTag> list = readPageIotaTags(st, m.pageIndex, s.serverLevel());
+                if (m.iotaTag == null) {
+                    if (m.slotIndex >= 0 && m.slotIndex < list.size()) list.remove(m.slotIndex);
+                } else {
+                    if (m.slotIndex >= 0 && m.slotIndex < list.size()) list.set(m.slotIndex, m.iotaTag);
+                    else list.add(m.iotaTag);
+                }
+                writePageIotaList(st, m.pageIndex, list, s.serverLevel());
+                sendSync(s, st);
+            });
+        }
+    }
+    public record MsgStaffPageAppendIotaC2S(int pageIndex, CompoundTag iotaTag) {
+        public static void encode(MsgStaffPageAppendIotaC2S m, FriendlyByteBuf b) { b.writeInt(m.pageIndex); if (m.iotaTag != null) b.writeNbt(m.iotaTag); }
+        public static MsgStaffPageAppendIotaC2S decode(FriendlyByteBuf b) { return new MsgStaffPageAppendIotaC2S(b.readInt(), b.readNbt()); }
+        public static void handle(MsgStaffPageAppendIotaC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                var st = staffInMainHand(s); if (st == null || m.iotaTag == null) return;
+                List<CompoundTag> list = readPageIotaTags(st, m.pageIndex, s.serverLevel());
+                list.add(m.iotaTag);
+                writePageIotaList(st, m.pageIndex, list, s.serverLevel());
+                sendSync(s, st);
+            });
+        }
+    }
+    public record MsgStaffPageSwapC2S(int a, int b) {
+        public static void encode(MsgStaffPageSwapC2S m, FriendlyByteBuf buf) { buf.writeInt(m.a); buf.writeInt(m.b); }
+        public static MsgStaffPageSwapC2S decode(FriendlyByteBuf buf) { return new MsgStaffPageSwapC2S(buf.readInt(), buf.readInt()); }
+        public static void handle(MsgStaffPageSwapC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                var st = staffInMainHand(s); if (st == null || m.a == m.b) return;
+                List<CompoundTag> la = readPageIotaTags(st, m.a, s.serverLevel());
+                List<CompoundTag> lb = readPageIotaTags(st, m.b, s.serverLevel());
+                String na = pageName(st, m.a), nb = pageName(st, m.b);
+                writePageIotaList(st, m.a, lb, s.serverLevel()); writePageIotaList(st, m.b, la, s.serverLevel());
+                setPageName(st, m.a, nb); setPageName(st, m.b, na);
+                int sel = at.petrak.hexcasting.common.items.storage.ItemSpellbook.getPage(st, 1);
+                if (sel == m.a) selectPage(st, m.b); else if (sel == m.b) selectPage(st, m.a);
+                sendSync(s, st);
+            });
+        }
+    }
+    /** 整页写入：改名 + 写完整 iota 原始标签（空列表=清空页面）；反序列化在服务端。 */
+    public record MsgStaffPageWriteC2S(int pageIndex, String name, List<CompoundTag> iotaTags) {
+        public static void encode(MsgStaffPageWriteC2S m, FriendlyByteBuf b) {
+            b.writeInt(m.pageIndex); b.writeUtf(m.name);
+            b.writeInt(m.iotaTags == null ? 0 : m.iotaTags.size());
+            if (m.iotaTags != null) for (CompoundTag t : m.iotaTags) if (t != null) b.writeNbt(t);
+        }
+        public static MsgStaffPageWriteC2S decode(FriendlyByteBuf b) {
+            int p = b.readInt(); String name = b.readUtf();
+            int c = b.readInt(); List<CompoundTag> tags = new ArrayList<>();
+            for (int j = 0; j < c; j++) { CompoundTag t = b.readNbt(); if (t != null) tags.add(t); }
+            return new MsgStaffPageWriteC2S(p, name, tags);
+        }
+        public static void handle(MsgStaffPageWriteC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                var st = staffInMainHand(s); if (st == null) return;
+                writePageIotaList(st, m.pageIndex, m.iotaTags == null ? List.of() : m.iotaTags, s.serverLevel());
+                setPageName(st, m.pageIndex, m.name);
+                sendSync(s, st);
+            });
+        }
+    }
+    public record MsgStaffPageSelectC2S(int pageIndex) {
+        public static void encode(MsgStaffPageSelectC2S m, FriendlyByteBuf b) { b.writeInt(m.pageIndex); }
+        public static MsgStaffPageSelectC2S decode(FriendlyByteBuf b) { return new MsgStaffPageSelectC2S(b.readInt()); }
+        public static void handle(MsgStaffPageSelectC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) { selectPage(st, m.pageIndex); sendSync(s, st); } });
+        }
+    }
+    /**
+     * 卓越法术检查：服务端直接调 HexParse 的检查（GreatPatternUnlocker.isUnlocked）与图案获取（PatternMapper.mapPatternWorld），不经 ParseCode 转换。
+     */
+    public record MsgStaffGreatSpellCheckC2S(String actionId, int targetSlot) {
+        public static void encode(MsgStaffGreatSpellCheckC2S m, FriendlyByteBuf b) { b.writeUtf(m.actionId); b.writeInt(m.targetSlot); }
+        public static MsgStaffGreatSpellCheckC2S decode(FriendlyByteBuf b) { return new MsgStaffGreatSpellCheckC2S(b.readUtf(), b.readInt()); }
+        public static void handle(MsgStaffGreatSpellCheckC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                boolean usable = false; String sig = ""; String dir = "";
+                try {
+                    var level = s.serverLevel();
+                    io.yukkuric.hexparse.hooks.PatternMapper.init(level);
+                    // jar 版本 mapPatternWorld 值为序列化后的 NBT 标签，需反序列化得到图案
+                    var tag = io.yukkuric.hexparse.hooks.PatternMapper.mapPatternWorld.get(m.actionId);
+                    if (tag != null) {
+                        Iota i = IotaType.deserialize(tag, level);
+                        if (i instanceof at.petrak.hexcasting.api.casting.iota.PatternIota pi) {
+                            boolean unlocked = io.yukkuric.hexparse.hooks.GreatPatternUnlocker.get(level).isUnlocked(m.actionId);
+                            if (unlocked) {
+                                usable = true;
+                                sig = pi.getPattern().anglesSignature();
+                                dir = pi.getPattern().getStartDir().name();
+                            }
+                        }
+                    }
+                } catch (Exception ignored) { }
+                CHANNEL.sendToPlayer(s, new MsgStaffGreatSpellCheckS2C(m.actionId, usable, sig, dir));
+            });
+        }
+    }
+    public record MsgStaffGreatSpellCheckS2C(String actionId, boolean usable, String signature, String startDir) {
+        public static void encode(MsgStaffGreatSpellCheckS2C m, FriendlyByteBuf b) { b.writeUtf(m.actionId); b.writeBoolean(m.usable); b.writeUtf(m.signature); b.writeUtf(m.startDir); }
+        public static MsgStaffGreatSpellCheckS2C decode(FriendlyByteBuf b) { return new MsgStaffGreatSpellCheckS2C(b.readUtf(), b.readBoolean(), b.readUtf(), b.readUtf()); }
+        public static void handle(MsgStaffGreatSpellCheckS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            Minecraft.getInstance().execute(() -> {
+                var s = Minecraft.getInstance().screen;
+                if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr) scr.onGreatSpellCheck(m.actionId, m.usable, m.signature, m.startDir);
+            });
+        }
+    }
+    /** 打开施法采集界面时清空玩家施法栈，保证采集到的都是本次施放产生的结果。 */
+    public record MsgStaffCastClearStackC2S() {
+        public static void encode(MsgStaffCastClearStackC2S m, FriendlyByteBuf b) { }
+        public static MsgStaffCastClearStackC2S decode(FriendlyByteBuf b) { return new MsgStaffCastClearStackC2S(); }
+        public static void handle(MsgStaffCastClearStackC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                try {
+                    // setStaffcastImage(null) → CCStaffcastImage 置空 tag → 下次 getStaffcastVM 返回全新空 image
+                    at.petrak.hexcasting.xplat.IXplatAbstractions.INSTANCE.setStaffcastImage(s, null);
+                } catch (Exception ignored) { }
+            });
+        }
+    }
 }

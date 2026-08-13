@@ -3,7 +3,7 @@ package cn.xm1221.AlmightlyStaff.client;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
-import cn.xm1221.AlmightlyStaff.gui.AlmightlyStaffIDEScreen;
+import cn.xm1221.AlmightlyStaff.gui.StaffLibScreen;
 import at.petrak.hexcasting.common.items.storage.ItemFocus;
 import at.petrak.hexcasting.xplat.IClientXplatAbstractions;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -52,10 +52,10 @@ public class AlmightlyStaffKeybinds {
             if (MODE_KEY.consumeClick()){
                 ModNetworking.CHANNEL.sendToServer(new ModNetworking.MsgAlmightlyStaffModeC2S());
             }
-            if (IDE_KEY.consumeClick() && !(Minecraft.getInstance().screen instanceof AlmightlyStaffIDEScreen)){
+            if (IDE_KEY.consumeClick() && !(Minecraft.getInstance().screen instanceof StaffLibScreen)){
                 var stack = Minecraft.getInstance().player.getMainHandItem();
                 if (stack.getItem() instanceof ItemAlmightlyStaff) {
-                    Minecraft.getInstance().setScreen(new AlmightlyStaffIDEScreen());
+                    Minecraft.getInstance().setScreen(new StaffLibScreen());
                 }
             }
             // 处理滚轮累积

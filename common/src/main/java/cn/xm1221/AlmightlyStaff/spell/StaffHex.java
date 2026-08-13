@@ -53,6 +53,7 @@ public final class StaffHex {
         List<PatternCatalogEntry> output = new ArrayList<>();
         Set<String> worldIds = new HashSet<>();
         for (ActionRegistryEntry entry : registry) {
+            try {
             ResourceLocation id = registry.getKey(entry);
             if (id == null) continue;
             HexPattern proto = entry.prototype();
@@ -74,6 +75,7 @@ public final class StaffHex {
             } else {
                 output.add(new PatternCatalogEntry(ref, Component.translatable("hexcasting.action." + id)));
             }
+            } catch (Exception ignored) { } // 单个条目异常（如 prototype 为 null）跳过，不阻塞整个目录
         }
         perWorldActionIds = worldIds;
         // 补全内置元图案

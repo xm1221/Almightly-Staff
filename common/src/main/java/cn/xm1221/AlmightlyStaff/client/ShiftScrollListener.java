@@ -40,7 +40,7 @@ public class ShiftScrollListener {
         if (mainHandDelta != 0 || offHandDelta != 0) {
             boolean invert = HexConfig.client().invertSpellbookScrollDirection();
             NetworkManager.sendToServer(new ModNetworking.MsgShiftScrollC2S(
-                mainHandDelta, offHandDelta, invert, invert));
+                mainHandDelta, offHandDelta, false, invert, invert));
             mainHandDelta = 0;
             offHandDelta = 0;
         }

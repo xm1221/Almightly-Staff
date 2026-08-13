@@ -142,9 +142,15 @@ public class StaffParseScreen extends Screen {
 
     // ==================== 渲染 ====================
 
+    // 1.21.1 的 renderBackground 会触发全屏模糊后处理（renderBlurredBackground），
+    // 且 Screen.render() 也会自动调用它；这里覆写为空并改画渐变，避免双重模糊覆盖 UI。
+    @Override
+    public void renderBackground(GuiGraphics g, int mx, int my, float pt) {
+    }
+
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g, mx, my, pt);
+        g.fillGradient(0, 0, width, height, 0xC0080A0D, 0xC0000000);
         g.drawCenteredString(font, title, width / 2, 14, 0xFFF4F6F8);
         int gx = textAreaX(), gy = textAreaY(), gw = textAreaW(), gh = textAreaH();
         g.fill(gx, gy, gx + gw, gy + gh, 0x22000000);

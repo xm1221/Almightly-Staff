@@ -4,6 +4,8 @@ import at.petrak.hexcasting.api.casting.iota.Iota;
 import at.petrak.hexcasting.api.casting.iota.IotaType;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
 import at.petrak.hexcasting.common.lib.hex.HexIotaTypes;
+import net.minecraft.ChatFormatting;
+import net.minecraft.locale.Language;
 import net.minecraft.nbt.CompoundTag;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
 import cn.xm1221.AlmightlyStaff.spell.PatternCatalogEntry;
@@ -235,6 +237,7 @@ public class StaffLibScreen extends Screen {
         super.render(g, mouseX, mouseY, delta);
         drawDragFeedback(g);
         if (menuOpen) drawSequenceMenu(g, mouseX, mouseY);
+        drawCatalogTooltip(g, mouseX, mouseY); // 最后画：tooltip 在最上层，不被面板/按钮遮挡
     }
 
     /** panel: heading above input fields (y=24), purple accent (y=36), right separator. */
@@ -379,6 +382,156 @@ public class StaffLibScreen extends Screen {
         int half = Math.max(3, size / 4);
         g.fill(cx - half, cy - half, cx + half + 1, cy + half + 1, color);
         g.fill(cx - half + 1, cy - half + 1, cx + half, cy + half, 0x66FFFFFF); // 内高光
+    }
+
+    // ==================== 图案目录悬停详情 tooltip（参考 CyberStaff drawPatternTooltip） ====================
+
+    private PatternCatalogEntry hoveredCatalogEntry(int mx, int my) {
+        if (draft == null || my < LIST_TOP || my >= listBottom || mx < middleX || mx >= middleX + middleWidth) return null;
+        int row = (my - LIST_TOP) / ROW_HEIGHT;
+        int idx = catalogScroll + row;
+        if (idx < 0 || idx >= filteredCatalog.size()) return null;
+        return filteredCatalog.get(idx);
+    }
+
+    /** 树堆改变：优先用手册 JSON 的 input/output，没有则回退到常见动作对照表。 */
+    private String patternSummary(PatternRef pattern) {
+        String actionId = pattern.actionId();
+        if (actionId.isEmpty() || pattern.signature().isBlank()) return "";
+        StaffBookData.Entry book = StaffBookData.get(actionId);
+        if (book != null && !book.args().isEmpty()) return book.args();
+        String path = actionPath(actionId);
+        return switch (path) {
+            case "get_caster" -> "→ entity";
+            case "empty_list" -> "→ list";
+            case "singleton" -> "iota → list";
+            case "append" -> "list, iota → list";
+            case "unappend" -> "list → list, iota";
+            case "index" -> "list, number → iota";
+            case "splat" -> "list → ...";
+            case "reverse" -> "list → list";
+            case "duplicate" -> "iota → iota, iota";
+            case "2dup" -> "iota, iota → iota, iota, iota, iota";
+            case "swap" -> "iota, iota → iota, iota";
+            case "stack_len" -> "→ number";
+            case "and", "or", "xor" -> "boolean, boolean → boolean";
+            case "not", "bool_coerce" -> "iota → boolean";
+            case "greater", "less", "greater_eq", "less_eq", "equals", "not_equals" -> "iota, iota → boolean";
+            case "add", "sub", "mul", "div", "pow" -> "number | vector, number | vector → number | vector";
+            case "modulo", "logarithm", "arctan2" -> "number, number → number";
+            case "sin", "cos", "tan", "arcsin", "arccos", "arctan" -> "number → number";
+            case "construct_vec" -> "number, number, number → vector";
+            case "deconstruct_vec" -> "vector → number, number, number";
+            case "read", "read/entity", "read/local", "akashic/read" -> "source → iota";
+            case "write", "write/entity", "write/local", "akashic/write" -> "source, iota →";
+            case "print", "beep" -> "iota →";
+            default -> "";
+        };
+    }
+
+    private String actionPath(String actionId) {
+        int colon = actionId.indexOf(':');
+        return colon >= 0 ? actionId.substring(colon + 1) : actionId;
+    }
+
+    private String cleanPatchouliText(String value) {
+        return value
+            .replace("$(br2)", " ")
+            .replace("$(br)", " ")
+            .replace("$(li)", " ")
+            .replace("$(p)", " ")
+            .replaceAll("\\$\\([^)]*\\)", "")
+            .replace("/$", "")
+            .replace("\\", "")
+            .trim();
+    }
+
+    /** 详细描述：优先用手册 JSON 的 text 页面（参考 hexcessible），回退到译文键猜测。 */
+    private String patternDescription(PatternRef pattern) {
+        String actionId = pattern.actionId();
+        if (actionId.isEmpty() || pattern.signature().isBlank()) return "";
+        // 数字常量：无手册页，直接显示数值
+        if (actionId.startsWith("hexcasting:number/")) {
+            return Component.translatable("almightly_staff.gui.number_desc",
+                actionId.substring(actionId.lastIndexOf('/') + 1)).getString();
+        }
+        Language lang = Language.getInstance();
+        StaffBookData.Entry book = StaffBookData.get(actionId);
+        if (book != null && !book.descKey().isEmpty()) {
+            String descKey = book.descKey();
+            String text = lang.has(descKey) ? lang.getOrDefault(descKey, "") : descKey;
+            String cleaned = StaffBookData.clean(text);
+            if (!cleaned.isEmpty()) return cleaned;
+        }
+        // 回退：译文键猜测（仅作保底）
+        String path = actionPath(actionId);
+        String[] sections = {
+            "basics_pattern", "math", "advanced_math", "lists", "sets", "logic", "stackmanip",
+            "readwrite", "meta", "spells", "great_spells", "circle_patterns", "akashic_patterns"
+        };
+        for (String section : sections) {
+            String base = "hexcasting.page." + section + "." + path;
+            for (String key : new String[]{base, base + ".1", base + ".2"}) {
+                if (lang.has(key)) return cleanPatchouliText(lang.getOrDefault(key, ""));
+            }
+        }
+        return "";
+    }
+
+    /** 图案目录悬停时的详情框（CyberStaff 风格：深背景 + 紫色边）。 */
+    private void drawCatalogTooltip(GuiGraphics g, int mx, int my) {
+        if (menuOpen || activeDragType != DRAG_NONE || pendingDragType != DRAG_NONE) return;
+        PatternCatalogEntry entry = hoveredCatalogEntry(mx, my);
+        if (entry == null) return;
+        PatternRef pattern = entry.pattern();
+        String summary = patternSummary(pattern);
+        String description = patternDescription(pattern);
+        PoseStack psBox = g.pose();
+        psBox.pushPose();
+        psBox.translate(0.0F, 0.0F, 600.0F); // 抬高 z：不低于目录/按钮文字
+        try {
+        int previewSize = 40;
+        int maxWidth = Math.max(200, width - 8);
+        int tooltipWidth = Math.min(Math.max(220, width / 2), maxWidth);
+        int textWidth = Math.max(48, tooltipWidth - previewSize - 24);
+        List<net.minecraft.util.FormattedCharSequence> nameLines = font.split(entry.displayName(), textWidth);
+        List<net.minecraft.util.FormattedCharSequence> summaryLines = summary.isEmpty() ? List.of()
+            : font.split(Component.literal(summary).withStyle(ChatFormatting.GRAY), textWidth);
+        List<net.minecraft.util.FormattedCharSequence> descLines = description.isEmpty() ? List.of()
+            : font.split(Component.literal(description).withStyle(ChatFormatting.GRAY), textWidth);
+        int lineH = 10;
+        int textHeight = 8 + (nameLines.size() + summaryLines.size() + descLines.size()) * lineH + 8;
+        int tooltipHeight = Math.max(previewSize + 16, textHeight);
+        int tooltipX = mx + 12, tooltipY = my + 12;
+        if (tooltipX + tooltipWidth > width) tooltipX = mx - tooltipWidth - 12;
+        if (tooltipY + tooltipHeight > height) tooltipY = height - tooltipHeight - 6;
+        tooltipX = Math.max(4, tooltipX);
+        tooltipY = Math.max(4, tooltipY);
+        // 框体（CyberStaff 风格）
+        g.fill(tooltipX - 1, tooltipY - 1, tooltipX + tooltipWidth + 1, tooltipY + tooltipHeight + 1, 0xF0100010);
+        g.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xF018111F);
+        g.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 1, 0xFF9C6ADE);
+        g.fill(tooltipX, tooltipY + tooltipHeight - 1, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xFF4B2F68);
+        g.fill(tooltipX, tooltipY, tooltipX + 1, tooltipY + tooltipHeight, 0xFF9C6ADE);
+        g.fill(tooltipX + tooltipWidth - 1, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xFF4B2F68);
+        // 图案预览
+        int previewX = tooltipX + 8, previewY = tooltipY + 8;
+        if (!pattern.signature().isBlank()) {
+            PoseStack ps = g.pose();
+            ps.pushPose();
+            StaffHex.renderPattern(pattern, ps, previewX, previewY, previewSize);
+            ps.popPose();
+        }
+        // 文本
+        int textX = previewX + previewSize + 8;
+        int textY = tooltipY + 8;
+        for (var c : nameLines) { g.drawString(font, c, textX, textY, 0xFFFFFFFF); textY += lineH; }
+        textY += 2;
+        for (var c : summaryLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0); textY += lineH; }
+        for (var c : descLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0); textY += lineH; }
+        } finally {
+            psBox.popPose();
+        }
     }
 
     private void drawFooter(GuiGraphics g) {

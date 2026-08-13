@@ -49,6 +49,7 @@
   "almightly_staff.gui.copy_pattern": "Copy Pattern",
   "almightly_staff.gui.paste_pattern": "Paste Pattern",
   "almightly_staff.gui.redraw": "Redraw",
+  "almightly_staff.gui.number_desc": "Number literal: %s",
   "almightly_staff.gui.cast_collect": "Cast",
   "almightly_staff.gui.stack_collected": "%s stack item(s) added",
     "almightly_staff.gui.great_spell_hint": "Enter this great spell's Parse code in the editor and convert it to add",

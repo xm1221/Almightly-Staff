@@ -33,6 +33,12 @@ CyberStaff 风格三栏布局：
 - 施法回包经 mixin 转发更新栈显示；`isStackClear` 时只清显示不关屏
 - **ESC 退出** → 栈内所有 iota **插入到右键打开菜单的那一格** + 自动保存
 
+### 图案目录悬停详情
+悬停中间图案目录的任意图案，弹出 CyberStaff 风格详情框（z=600 最上层，不遮挡）：
+- **图案预览** + **名称**（白色）
+- **栈变化摘要**（灰）：`input -> output`，优先取手册 JSON 的 input/output
+- **详细描述**（灰）：直接读**所有 mod 的 Patchouli 手册 JSON**（hexcasting / hexal / hexical…，参考 hexcessible 的 `BookEntries`），按 `op_id` 建立 `{text, input, output}` 映射，显示时按当前语言解析翻译键；数字常量等无书页的图案直接显示数值
+
 ### Parse 代码双向转换
 - **法术 → 代码**：Parse 按钮 / P 键 → 客户端组装 ListIota 原始 NBT → 服务端 `ParserMain.ParseIotaNbt` → 回传代码并打开多行文本编辑器
 - **代码 → 法术**：编辑器内确认 → 服务端 `ParserMain.ParseCode` → 结果回填序列

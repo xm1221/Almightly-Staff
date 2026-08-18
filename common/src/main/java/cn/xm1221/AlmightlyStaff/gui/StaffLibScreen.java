@@ -23,6 +23,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -97,13 +98,67 @@ public class StaffLibScreen extends Screen {
     // ==================== 网络同步 ====================
     private final List<ModNetworking.PageData> pendingSyncPages = new ArrayList<>();
 
-    /** 分块同步：累积直到最后一块再应用。 */
-    public void onSyncChunk(List<ModNetworking.PageData> chunkPages, int selectedPage, boolean lastChunk) {
+    /** 同步入口。incremental=true 表示编辑后的增量回发（只带受影响页），按 pageIndex 合并；否则为全量分块同步。 */
+    public void onSyncChunk(List<ModNetworking.PageData> chunkPages, int selectedPage, boolean lastChunk, boolean incremental) {
+        if (incremental) { onIncrementalSync(chunkPages, selectedPage); return; }
         pendingSyncPages.addAll(chunkPages);
         if (!lastChunk) return;
         List<ModNetworking.PageData> all = new ArrayList<>(pendingSyncPages);
         pendingSyncPages.clear();
         onSync(all, selectedPage);
+    }
+
+    /**
+     * 增量同步：只把受影响页按 pageIndex 合并进现有列表（不整表替换、不打断当前编辑草稿）。
+     * 受影响的页若 iota 与名字都为空 = 该页已被删除 → 从列表移除。
+     * 空 pages 表示仅选中变化 → 此时再做"切换当前编辑页"。
+     */
+    private void onIncrementalSync(List<ModNetworking.PageData> updatedPages, int selectedPage) {
+        boolean removedDraft = false;
+        for (ModNetworking.PageData u : updatedPages) {
+            boolean remove = u.iotas().isEmpty() && u.name().isEmpty();
+            int found = -1;
+            for (int i = 0; i < pages.size(); i++) if (pages.get(i).pageIndex() == u.pageIndex()) { found = i; break; }
+            if (remove) {
+                if (found >= 0) {
+                    pages.remove(found);
+                    if (draft != null && u.pageIndex() == draft.pageIndex()) removedDraft = true;
+                }
+            } else if (found >= 0) {
+                pages.set(found, u);
+            } else {
+                pages.add(u);
+                pages.sort(Comparator.comparingInt(ModNetworking.PageData::pageIndex));
+            }
+        }
+        // 刷新左侧高亮（选中页）
+        selectedPageIndex = -1;
+        for (int i = 0; i < pages.size(); i++) if (pages.get(i).pageIndex() == selectedPage) { selectedPageIndex = i; break; }
+
+        // 被编辑的草稿页被删掉：清空编辑器（镜像全量同步的旧行为）
+        if (removedDraft) {
+            setDraft(selectedPageIndex >= 0 ? pages.get(selectedPageIndex) : null);
+            return;
+        }
+        // 纯选中变化（没带任何页数据）→ 做"切换当前编辑页"
+        if (updatedPages.isEmpty()) {
+            if (selectedPageIndex >= 0) {
+                ModNetworking.PageData sp = pages.get(selectedPageIndex);
+                if (draft == null || draft.pageIndex() != sp.pageIndex()) setDraft(sp);
+                else if (nameField != null && !nameField.isFocused()) nameField.setValue(sp.name());
+            } else {
+                setDraft(null);
+            }
+            return;
+        }
+        // 内容更新：若恰好是正在编辑的那页，只刷新名字，保留草稿与撤销栈
+        if (draft != null) {
+            for (ModNetworking.PageData u : updatedPages) {
+                if (u.pageIndex() == draft.pageIndex()) {
+                    if (nameField != null && !nameField.isFocused()) nameField.setValue(u.name());
+                }
+            }
+        }
     }
 
     public void onSync(List<ModNetworking.PageData> syncedPages, int selectedPage) {

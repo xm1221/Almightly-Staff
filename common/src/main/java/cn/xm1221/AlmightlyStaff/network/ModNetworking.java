@@ -254,7 +254,7 @@ public class ModNetworking {
         for (PageData p : all) {
             int pb = pageBytes(p);
             if (!batch.isEmpty() && batchBytes + pb > MAX_BYTES) {
-                CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), selected, false));
+                CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), selected, false, false));
                 batch.clear();
                 batchBytes = 4;
             }
@@ -262,8 +262,21 @@ public class ModNetworking {
             batchBytes += pb;
         }
         if (!batch.isEmpty() || all.isEmpty()) {
-            CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), selected, true));
+            CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), selected, true, false));
         }
+    }
+
+    /** 构造单个页的 PageData。iota 与名字都为空表示该页已删除（客户端据此合并时移除）。 */
+    private static PageData buildPage(ItemStack stack, int pageIndex, net.minecraft.server.level.ServerLevel level) {
+        return new PageData(pageIndex, pageName(stack, pageIndex), readPageIotaTags(stack, pageIndex, level));
+    }
+
+    /** 增量同步：只回发受影响页（无入参=仅选中变化），并携带当前选中页；客户端按 pageIndex 合并。 */
+    private static void sendPageSync(ServerPlayer s, ItemStack stack, int... pageIndexes) {
+        int selected = at.petrak.hexcasting.common.items.storage.ItemSpellbook.getPage(stack, 1);
+        List<PageData> pages = new ArrayList<>();
+        for (int idx : pageIndexes) pages.add(buildPage(stack, idx, s.serverLevel()));
+        CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(pages, selected, true, true));
     }
 
     private static ItemStack staffInMainHand(ServerPlayer s) {
@@ -279,7 +292,12 @@ public class ModNetworking {
             ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) sendSync(s, st); });
         }
     }
-    public record MsgStaffLibSyncS2C(List<PageData> pages, int selectedPage, boolean lastChunk) {
+    /**
+     * 页同步回包。lastChunk 只对全量同步有意义（首开分块累计到最后一包再应用）；
+     * incremental=true 表示这是编辑后的增量回发：只携带受影响页（可能为空=仅选中变化），
+     * 客户端按 pageIndex 合并到现有列表，而不是整表替换。
+     */
+    public record MsgStaffLibSyncS2C(List<PageData> pages, int selectedPage, boolean lastChunk, boolean incremental) {
         public static void encode(MsgStaffLibSyncS2C m, FriendlyByteBuf b) {
             b.writeInt(m.pages.size());
             for (PageData p : m.pages) {
@@ -289,6 +307,7 @@ public class ModNetworking {
             }
             b.writeInt(m.selectedPage);
             b.writeBoolean(m.lastChunk);
+            b.writeBoolean(m.incremental);
         }
         public static MsgStaffLibSyncS2C decode(FriendlyByteBuf b) {
             int n = b.readInt(); List<PageData> pages = new ArrayList<>();
@@ -301,12 +320,13 @@ public class ModNetworking {
                 }
                 pages.add(new PageData(idx, name, iotas));
             }
-            return new MsgStaffLibSyncS2C(pages, b.readInt(), b.readBoolean());
+            return new MsgStaffLibSyncS2C(pages, b.readInt(), b.readBoolean(), b.readBoolean());
         }
         public static void handle(MsgStaffLibSyncS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             Minecraft.getInstance().execute(() -> {
                 var s = Minecraft.getInstance().screen;
-                if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr) scr.onSyncChunk(m.pages, m.selectedPage, m.lastChunk);
+                if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr)
+                    scr.onSyncChunk(m.pages, m.selectedPage, m.lastChunk, m.incremental);
             });
         }
     }
@@ -315,7 +335,7 @@ public class ModNetworking {
         public static MsgStaffPageRenameC2S decode(FriendlyByteBuf b) { return new MsgStaffPageRenameC2S(b.readInt(), b.readUtf()); }
         public static void handle(MsgStaffPageRenameC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
-            ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) { setPageName(st, m.pageIndex, m.name); sendSync(s, st); } });
+            ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) { setPageName(st, m.pageIndex, m.name); sendPageSync(s, st, m.pageIndex); } });
         }
     }
     public record MsgStaffPageSetIotaC2S(int pageIndex, int slotIndex, CompoundTag iotaTag) {
@@ -333,7 +353,7 @@ public class ModNetworking {
                     else list.add(m.iotaTag);
                 }
                 writePageIotaList(st, m.pageIndex, list, s.serverLevel());
-                sendSync(s, st);
+                sendPageSync(s, st, m.pageIndex);
             });
         }
     }
@@ -347,7 +367,7 @@ public class ModNetworking {
                 List<CompoundTag> list = readPageIotaTags(st, m.pageIndex, s.serverLevel());
                 list.add(m.iotaTag);
                 writePageIotaList(st, m.pageIndex, list, s.serverLevel());
-                sendSync(s, st);
+                sendPageSync(s, st, m.pageIndex);
             });
         }
     }
@@ -365,7 +385,7 @@ public class ModNetworking {
                 setPageName(st, m.a, nb); setPageName(st, m.b, na);
                 int sel = at.petrak.hexcasting.common.items.storage.ItemSpellbook.getPage(st, 1);
                 if (sel == m.a) selectPage(st, m.b); else if (sel == m.b) selectPage(st, m.a);
-                sendSync(s, st);
+                sendPageSync(s, st, m.a, m.b);
             });
         }
     }
@@ -388,7 +408,7 @@ public class ModNetworking {
                 var st = staffInMainHand(s); if (st == null) return;
                 writePageIotaList(st, m.pageIndex, m.iotaTags == null ? List.of() : m.iotaTags, s.serverLevel());
                 setPageName(st, m.pageIndex, m.name);
-                sendSync(s, st);
+                sendPageSync(s, st, m.pageIndex);
             });
         }
     }
@@ -397,7 +417,7 @@ public class ModNetworking {
         public static MsgStaffPageSelectC2S decode(FriendlyByteBuf b) { return new MsgStaffPageSelectC2S(b.readInt()); }
         public static void handle(MsgStaffPageSelectC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
-            ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) { selectPage(st, m.pageIndex); sendSync(s, st); } });
+            ctx.get().queue(() -> { var st = staffInMainHand(s); if (st != null) { selectPage(st, m.pageIndex); sendPageSync(s, st); } });
         }
     }
     /**

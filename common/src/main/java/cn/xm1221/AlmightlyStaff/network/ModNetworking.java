@@ -61,8 +61,6 @@ public class ModNetworking {
         CHANNEL.register(MsgStaffGreatSpellCheckC2S.class, MsgStaffGreatSpellCheckC2S::encode, MsgStaffGreatSpellCheckC2S::decode, MsgStaffGreatSpellCheckC2S::handle);
         CHANNEL.register(MsgStaffGreatSpellCheckS2C.class, MsgStaffGreatSpellCheckS2C::encode, MsgStaffGreatSpellCheckS2C::decode, MsgStaffGreatSpellCheckS2C::handle);
         CHANNEL.register(MsgStaffCastClearStackC2S.class, MsgStaffCastClearStackC2S::encode, MsgStaffCastClearStackC2S::decode, MsgStaffCastClearStackC2S::handle);
-        CHANNEL.register(MsgStaffShareSpellC2S.class, MsgStaffShareSpellC2S::encode, MsgStaffShareSpellC2S::decode, MsgStaffShareSpellC2S::handle);
-        CHANNEL.register(MsgStaffShareSpellS2C.class, MsgStaffShareSpellS2C::encode, MsgStaffShareSpellS2C::decode, MsgStaffShareSpellS2C::handle);
     }
 
     // ---- 滚轮翻页 ----
@@ -474,32 +472,6 @@ public class ModNetworking {
                     // setStaffcastImage(null) → CCStaffcastImage 置空 tag → 下次 getStaffcastVM 返回全新空 image
                     at.petrak.hexcasting.xplat.IXplatAbstractions.INSTANCE.setStaffcastImage(s, null);
                 } catch (Exception ignored) { }
-            });
-        }
-    }
-    /** 分享到聊天：客户端提交整页 ListIota 原始 NBT，服务端用 HexParse 公开 API 转成代码回传，
-     *  客户端把代码发到聊天（hexparse 的 inline 联动会把图案渲染成图标，数字等非图案 iota 直接以代码形式显示）。 */
-    public record MsgStaffShareSpellC2S(CompoundTag listNbt) {
-        public static void encode(MsgStaffShareSpellC2S m, FriendlyByteBuf b) { if (m.listNbt != null) b.writeNbt(m.listNbt); }
-        public static MsgStaffShareSpellC2S decode(FriendlyByteBuf b) { return new MsgStaffShareSpellC2S(b.readNbt()); }
-        public static void handle(MsgStaffShareSpellC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
-            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
-            ctx.get().queue(() -> {
-                String code = "";
-                try {
-                    code = io.yukkuric.hexparse.parsers.ParserMain.ParseIotaNbt(m.listNbt, s, x -> x);
-                } catch (Exception ignored) { }
-                CHANNEL.sendToPlayer(s, new MsgStaffShareSpellS2C(code == null ? "" : code));
-            });
-        }
-    }
-    public record MsgStaffShareSpellS2C(String code) {
-        public static void encode(MsgStaffShareSpellS2C m, FriendlyByteBuf b) { b.writeUtf(m.code); }
-        public static MsgStaffShareSpellS2C decode(FriendlyByteBuf b) { return new MsgStaffShareSpellS2C(b.readUtf()); }
-        public static void handle(MsgStaffShareSpellS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
-            Minecraft.getInstance().execute(() -> {
-                var s = Minecraft.getInstance().screen;
-                if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr) scr.onShareCode(m.code);
             });
         }
     }

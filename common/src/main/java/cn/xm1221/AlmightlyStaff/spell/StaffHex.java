@@ -145,14 +145,24 @@ public final class StaffHex {
             + (ref.signature() == null ? "" : ref.signature());
         Component cached = PATTERN_NAME_CACHE.get(cacheKey);
         if (cached != null) return cached;
-        // 1) special handler（数字之精思：N、面具等，按形状匹配）：tryMatch 不依赖 env，客户端可安全调用
+        HexPattern pattern = patternFor(ref);
+        // 1) 数字字面量图案：按形状确定性解析（与 hexmod SpecialHandlerNumberLiteral 同款算法，
+        //    不依赖 env/注册表，客户端可靠）。数字不占用动作注册表 id，所以必须走形状匹配。
+        try {
+            Component num = numberLiteralName(pattern);
+            if (num != null) {
+                PATTERN_NAME_CACHE.put(cacheKey, num);
+                return num;
+            }
+        } catch (Exception ignored) { }
+        // 2) 其它 special handler（面具等，按形状匹配兜底）
         try {
             var registry = IXplatAbstractions.INSTANCE.getSpecialHandlerRegistry();
             for (var key : registry.registryKeySet()) {
                 var factory = registry.get(key);
                 if (factory == null) continue;
                 try {
-                    var handler = factory.tryMatch(patternFor(ref), null);
+                    var handler = factory.tryMatch(pattern, null);
                     if (handler != null) {
                         Component name = handler.getName();
                         PATTERN_NAME_CACHE.put(cacheKey, name);
@@ -163,14 +173,14 @@ public final class StaffHex {
         } catch (Exception ignored) { }
         String id = ref.actionId();
         if (id == null || id.isEmpty()) return null;
-        // 2) 元图案（escape/undo/括号）：用本项目自定义译名
+        // 3) 元图案（escape/undo/括号）：用本项目自定义译名
         String metaKey = metaKey(id);
         if (metaKey != null && net.minecraft.locale.Language.getInstance().has(metaKey)) {
             Component name = Component.translatable(metaKey);
             PATTERN_NAME_CACHE.put(cacheKey, name);
             return name;
         }
-        // 3) 普通注册动作官方 i18n 键
+        // 4) 普通注册动作官方 i18n 键
         String actKey = "hexcasting.action." + id;
         if (net.minecraft.locale.Language.getInstance().has(actKey)) {
             Component name = Component.translatable(actKey);
@@ -178,6 +188,30 @@ public final class StaffHex {
             return name;
         }
         return null;
+    }
+
+    /** 数字之精思（数字字面量）图案的显示名。算法照搬 hexmod SpecialHandlerNumberLiteral：
+     *  签名以 aqaa（正）或 dedd（负）开头，后续 w+1 q+5 e+10 a*2 d/2 s 跳过；返回 null 表示非数字图案。 */
+    private static Component numberLiteralName(HexPattern pat) {
+        String sig = pat.anglesSignature();
+        if (sig == null || !(sig.startsWith("aqaa") || sig.startsWith("dedd"))) return null;
+        boolean negate = sig.startsWith("dedd");
+        double acc = 0.0;
+        for (int i = 4; i < sig.length(); i++) {
+            switch (sig.charAt(i)) {
+                case 'w' -> acc += 1;
+                case 'q' -> acc += 5;
+                case 'e' -> acc += 10;
+                case 'a' -> acc *= 2;
+                case 'd' -> acc /= 2;
+                case 's' -> { }
+                default -> { return null; }
+            }
+        }
+        if (negate) acc = -acc;
+        String fmt = acc == Math.rint(acc) ? String.valueOf((long) acc) : String.valueOf(acc);
+        return Component.translatable("hexcasting.special.hexcasting:number", fmt)
+            .withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE);
     }
 
     private static String metaKey(String actionId) {

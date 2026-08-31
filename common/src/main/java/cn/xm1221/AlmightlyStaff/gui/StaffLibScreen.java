@@ -398,13 +398,26 @@ public class StaffLibScreen extends Screen {
         }
         g.disableScissor();
         drawScrollbar(g, rightX, rightWidth, totalRows, sequenceScroll);
-        // 悬停已填充格子：显示该 iota 的数值 tooltip
+        // 悬停已填充格子：已注册图案显示其名称，否则沿用 iota 数值 tooltip
         if (draft != null && mx >= rightX && mx < rightX + rightWidth && my >= LIST_TOP && my < listBottom) {
             int hoverSlot = sequenceSlotAt(mx, my);
             if (hoverSlot >= 0 && hoverSlot < iotas.size()) {
-                g.renderTooltip(font, IotaType.getDisplay(iotas.get(hoverSlot)), mx, my);
+                Component hover = sequenceHoverName(iotas.get(hoverSlot));
+                g.renderTooltip(font, hover != null ? hover : IotaType.getDisplay(iotas.get(hoverSlot)), mx, my);
             }
         }
+    }
+
+    /** 悬停名称：图案 iota 且能解析到已注册动作 → 显示其本地化名称；否则 null（回退 getDisplay）。 */
+    private Component sequenceHoverName(CompoundTag tag) {
+        if (IotaType.getTypeFromTag(tag) != HexIotaTypes.PATTERN) return null;
+        try {
+            Iota i = IotaType.deserialize(tag, null); // 图案无需 level
+            if (i instanceof PatternIota pi) {
+                return StaffHex.patternDisplayName(StaffHex.refFor(pi.getPattern()));
+            }
+        } catch (Exception ignored) { }
+        return null;
     }
 
     /** CyberStaff slot style: border + fill + top highlight. */

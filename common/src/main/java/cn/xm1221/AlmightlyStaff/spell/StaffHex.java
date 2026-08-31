@@ -134,6 +134,36 @@ public final class StaffHex {
         }
     }
 
+    /** 已注册图案的本地化显示名；未知/无名称键的返回 null（调用方回退 IotaType.getDisplay）。 */
+    public static Component patternDisplayName(PatternRef ref) {
+        String id = ref.actionId();
+        if (id == null || id.isEmpty()) return null;
+        if (id.startsWith("hexcasting:number/")) {
+            return Component.translatable("almightly_staff.gui.number_desc",
+                id.substring(id.lastIndexOf('/') + 1));
+        }
+        // 元图案（escape/undo/括号）：用本项目自定义译名
+        String metaKey = metaKey(id);
+        if (metaKey != null && net.minecraft.locale.Language.getInstance().has(metaKey)) {
+            return Component.translatable(metaKey);
+        }
+        String actKey = "hexcasting.action." + id;
+        if (net.minecraft.locale.Language.getInstance().has(actKey)) {
+            return Component.translatable(actKey);
+        }
+        return null;
+    }
+
+    private static String metaKey(String actionId) {
+        return switch (actionId) {
+            case "hexcasting:escape" -> "almightly_staff.meta.escape";
+            case "hexcasting:open_paren" -> "almightly_staff.meta.open_paren";
+            case "hexcasting:close_paren" -> "almightly_staff.meta.close_paren";
+            case "hexcasting:undo" -> "almightly_staff.meta.undo";
+            default -> null;
+        };
+    }
+
     private static boolean isMeta(PatternRef ref) {
         for (MetaPattern meta : META_PATTERNS) {
             if (meta.actionId.equals(ref.actionId())) return true;

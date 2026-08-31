@@ -3,6 +3,8 @@ package cn.xm1221.AlmightlyStaff.gui;
 import at.petrak.hexcasting.api.casting.iota.Iota;
 import at.petrak.hexcasting.api.casting.iota.IotaType;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
+import at.petrak.hexcasting.api.casting.math.HexDir;
+import at.petrak.hexcasting.api.casting.math.HexPattern;
 import at.petrak.hexcasting.common.lib.hex.HexIotaTypes;
 import net.minecraft.ChatFormatting;
 import net.minecraft.locale.Language;
@@ -889,13 +891,13 @@ public class StaffLibScreen extends Screen {
         menuX = (int) mx;
         menuY = (int) my;
         if (menuX + MENU_WIDTH > width) menuX = width - MENU_WIDTH - 2;
-        if (menuY + MENU_ITEM_HEIGHT * 6 + 2 > height) menuY = height - MENU_ITEM_HEIGHT * 6 - 4;
+        if (menuY + MENU_ITEM_HEIGHT * 7 + 2 > height) menuY = height - MENU_ITEM_HEIGHT * 7 - 4;
         menuOpen = true;
         return true;
     }
 
     private boolean clickSequenceMenu(double mx, double my) {
-        if (mx < menuX || mx >= menuX + MENU_WIDTH || my < menuY || my >= menuY + MENU_ITEM_HEIGHT * 6 + 2) return false;
+        if (mx < menuX || mx >= menuX + MENU_WIDTH || my < menuY || my >= menuY + MENU_ITEM_HEIGHT * 7 + 2) return false;
         int item = (int) ((my - menuY - 1) / MENU_ITEM_HEIGHT);
         if (item == 2 && patternClipboard.isEmpty()) { menuOpen = false; return true; }
         switch (item) {
@@ -905,6 +907,7 @@ public class StaffLibScreen extends Screen {
             case 3 -> { int p = primarySelectedSlot(); if (p >= 0) openDrawGui(p); } // 重绘覆盖
             case 4 -> openDrawInsertBefore(menuSlot); // 向后绘制：插入到右键目标格之前
             case 5 -> openCastScreen(); // 真实施法采集栈
+            case 6 -> shareSpellToChat(); // 分享到聊天（inline 图案图标）
             default -> { }
         }
         menuOpen = false;
@@ -913,7 +916,7 @@ public class StaffLibScreen extends Screen {
 
     /** 右键菜单（样式改编自 CyberStaff 的 drawSequenceMenu，致谢 Aurover）。z=600 抬高图层遮挡按键。 */
     private void drawSequenceMenu(GuiGraphics g, int mx, int my) {
-        int h = MENU_ITEM_HEIGHT * 6 + 2;
+        int h = MENU_ITEM_HEIGHT * 7 + 2;
         PoseStack ps = g.pose();
         ps.pushPose();
         ps.translate(0.0F, 0.0F, 600.0F);
@@ -922,9 +925,10 @@ public class StaffLibScreen extends Screen {
             g.fill(menuX, menuY, menuX + MENU_WIDTH, menuY + h, 0xF022272D);
             String[] keys = {"almightly_staff.gui.remove", "almightly_staff.gui.copy_pattern",
                 "almightly_staff.gui.paste_pattern", "almightly_staff.gui.redraw",
-                "almightly_staff.gui.draw_backward", "almightly_staff.gui.cast_collect"};
+                "almightly_staff.gui.draw_backward", "almightly_staff.gui.cast_collect",
+                "almightly_staff.gui.share_chat"};
             boolean hasSel = !selectedSlots.isEmpty();
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < 7; i++) {
                 int y = menuY + 1 + i * MENU_ITEM_HEIGHT;
                 boolean hover = mx >= menuX && mx < menuX + MENU_WIDTH && my >= y && my < y + MENU_ITEM_HEIGHT;
                 boolean enabled = switch (i) {
@@ -934,6 +938,7 @@ public class StaffLibScreen extends Screen {
                     case 3 -> hasSel; // 重绘选中格
                     case 4 -> draft != null && draft.pageIndex() > 0; // 向后绘制：插入
                     case 5 -> draft != null && draft.pageIndex() > 0; // 真实施法采集栈
+                    case 6 -> draft != null && draft.pageIndex() > 0; // 分享到聊天
                     default -> true;
                 };
                 if (hover && enabled) g.fill(menuX, y, menuX + MENU_WIDTH, y + MENU_ITEM_HEIGHT, 0xAA60457B);
@@ -968,6 +973,49 @@ public class StaffLibScreen extends Screen {
             selectionAnchor = base;
         }
         saveDraftNow(); // 粘贴即保存
+    }
+
+    // ==================== 分享到聊天（inline 图案图标）====================
+
+    /** 把当前法术页以 <dir, sig> 文本发到聊天。hexmod 的 inline 匹配器
+     *  （v0.11.3 interop/inline/HexPatternMatcher）会在各客户端聊天里把这段文本渲染成图案小图标：
+     *  悬停显示"写有该图案的卷轴"tooltip、点击复制图案串。无需本模组依赖 inline。 */
+    private void shareSpellToChat() {
+        if (draft == null || draft.pageIndex() == 0 || minecraft == null || minecraft.player == null) return;
+        StringBuilder sb = new StringBuilder(draft.name().isEmpty() ? "?" : draft.name());
+        sb.append(": ");
+        boolean any = false;
+        for (CompoundTag t : draft.iotas()) {
+            if (IotaType.getTypeFromTag(t) != HexIotaTypes.PATTERN) continue;
+            try {
+                Iota i = IotaType.deserialize(t, null); // 图案无需 level
+                if (i instanceof PatternIota pi && pi.getPattern() != null) {
+                    if (any) sb.append(' ');
+                    sb.append(patternToInlineText(pi.getPattern()));
+                    any = true;
+                }
+            } catch (Exception ignored) { }
+        }
+        if (!any) {
+            showStatus(Component.translatable("almightly_staff.gui.share_nothing").getString());
+            return;
+        }
+        minecraft.player.connection.sendChat(sb.toString()); // 走服务端聊天广播，双方客户端都能渲染图标
+        showStatus(Component.translatable("almightly_staff.gui.share_done").getString());
+    }
+
+    /** 图案 → inline 匹配文本：<方向缩写, 角度签名>（方向用 e/ne/nw/se/sw/w 缩写，无下划线）。 */
+    private static String patternToInlineText(HexPattern pat) {
+        String dir = switch (pat.getStartDir()) {
+            case NORTH_EAST -> "ne";
+            case EAST -> "e";
+            case SOUTH_EAST -> "se";
+            case SOUTH_WEST -> "sw";
+            case WEST -> "w";
+            case NORTH_WEST -> "nw";
+        };
+        String sig = pat.anglesSignature();
+        return sig.isEmpty() ? "<" + dir + ">" : "<" + dir + ", " + sig + ">";
     }
 
     @Override

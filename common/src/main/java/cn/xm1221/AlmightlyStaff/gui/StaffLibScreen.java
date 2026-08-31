@@ -745,12 +745,12 @@ public class StaffLibScreen extends Screen {
         minecraft.setScreen(new StaffDrawScreen(this, ref -> onPatternDrawn(slotIndex, ref)));
     }
 
-    /** 向后绘制回调：新图案插入到 targetSlot 之前（原图案及之后整体后移一位），即"往图案之间插入"。 */
+    /** 向后绘制回调：新图案插入到 targetSlot 之后一格（右键两个图案中的前者 → 新图案落到两者中间）。 */
     private void onPatternDrawnInsert(int targetSlot, PatternRef ref) {
         if (draft == null) return;
         pushUndo();
         CompoundTag tag = IotaType.serialize(new PatternIota(StaffHex.patternFor(ref)));
-        int insertAt = Math.max(0, Math.min(targetSlot, draft.iotas().size()));
+        int insertAt = Math.max(0, Math.min(targetSlot + 1, draft.iotas().size()));
         draft.iotas().add(insertAt, tag);
         clearSelection();
         if (insertAt < draft.iotas().size()) { selectedSlots.add(insertAt); selectionAnchor = insertAt; }
@@ -758,8 +758,8 @@ public class StaffLibScreen extends Screen {
         learnDrawnGreatSpell(ref);
     }
 
-    /** 打开"向后绘制"画布：画完插入到 targetSlot 之前。 */
-    private void openDrawInsertBefore(int targetSlot) {
+    /** 打开"向后绘制"画布：画完插入到 targetSlot 之后。 */
+    private void openDrawInsertAfter(int targetSlot) {
         minecraft.setScreen(new StaffDrawScreen(this, ref -> onPatternDrawnInsert(targetSlot, ref)));
     }
 
@@ -905,7 +905,7 @@ public class StaffLibScreen extends Screen {
             case 1 -> copyPattern();
             case 2 -> pastePatternAt(menuSlot);
             case 3 -> { int p = primarySelectedSlot(); if (p >= 0) openDrawGui(p); } // 重绘覆盖
-            case 4 -> openDrawInsertBefore(menuSlot); // 向后绘制：插入到右键目标格之前
+            case 4 -> openDrawInsertAfter(menuSlot); // 向后绘制：插入到右键目标格之后
             case 5 -> openCastScreen(); // 真实施法采集栈
             case 6 -> shareSpellToChat(); // 分享到聊天（inline 图案图标）
             default -> { }

@@ -30,6 +30,9 @@ public class StaffCastScreen extends Screen {
     private final Consumer<List<CompoundTag>> onExit;
     private final List<ResolvedPattern> patterns = new ArrayList<>();
     private GuiSpellcasting spellcasting;
+    /** 左键按住状态：部分环境（如 Forge 包装屏）拖拽事件不会可靠送达转发链，
+     *  导致画了第一个点却连不出线。自跟踪按状态 + 每帧兜底喂坐标给 spellcasting。 */
+    private boolean mouseHeld;
 
     public StaffCastScreen(Screen parent, Consumer<List<CompoundTag>> onExit) {
         super(Component.translatable("almightly_staff.gui.cast_collect"));
@@ -63,6 +66,7 @@ public class StaffCastScreen extends Screen {
         renderBackground(g);
         spellcasting.render(g, mx, my, pt);
         super.render(g, mx, my, pt);
+        driveDrag(); // 每帧兜底：按住左键时把当前鼠标位置喂给 spellcasting
     }
 
     @Override
@@ -73,20 +77,40 @@ public class StaffCastScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (button == 0) mouseHeld = true;
         if (spellcasting.mouseClicked(mx, my, button)) return true;
         return super.mouseClicked(mx, my, button);
     }
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
+        if (button == 0) mouseHeld = false;
         if (spellcasting.mouseReleased(mx, my, button)) return true;
         return super.mouseReleased(mx, my, button);
     }
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (button == 0) mouseHeld = true;
         if (spellcasting.mouseDragged(mx, my, button, dx, dy)) return true;
         return super.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    @Override
+    public void mouseMoved(double mx, double my) {
+        spellcasting.mouseMoved(mx, my); // clickingTogglesDrawing 模式靠 mouseMoved 续线，必须转发
+        super.mouseMoved(mx, my);
+    }
+
+    /** 按住左键期间，每帧以 mouseDragged 形式把当前鼠标位置喂给嵌套 spellcasting，
+     *  使连线/多点绘制不依赖 vanilla 拖拽事件是否送达（Forge 下的可靠兜底）。 */
+    private void driveDrag() {
+        if (!mouseHeld || spellcasting == null || minecraft == null || minecraft.screen != this) return;
+        var mh = minecraft.mouseHandler;
+        var win = minecraft.getWindow();
+        double x = mh.xpos() * win.getGuiScaledWidth() / win.getScreenWidth();
+        double y = mh.ypos() * win.getGuiScaledHeight() / win.getScreenHeight();
+        spellcasting.mouseDragged(x, y, 0, 0, 0);
     }
 
     @Override

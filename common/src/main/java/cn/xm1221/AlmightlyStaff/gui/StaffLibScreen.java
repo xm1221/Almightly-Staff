@@ -730,6 +730,24 @@ public class StaffLibScreen extends Screen {
         minecraft.setScreen(new StaffDrawScreen(this, ref -> onPatternDrawn(slotIndex, ref)));
     }
 
+    /** 向后绘制回调：新图案插入到 targetSlot 之前（原图案及之后整体后移一位），即"往图案之间插入"。 */
+    private void onPatternDrawnInsert(int targetSlot, PatternRef ref) {
+        if (draft == null) return;
+        pushUndo();
+        CompoundTag tag = IotaType.serialize(new PatternIota(StaffHex.patternFor(ref)));
+        int insertAt = Math.max(0, Math.min(targetSlot, draft.iotas().size()));
+        draft.iotas().add(insertAt, tag);
+        clearSelection();
+        if (insertAt < draft.iotas().size()) { selectedSlots.add(insertAt); selectionAnchor = insertAt; }
+        saveDraftNow();
+        learnDrawnGreatSpell(ref);
+    }
+
+    /** 打开"向后绘制"画布：画完插入到 targetSlot 之前。 */
+    private void openDrawInsertBefore(int targetSlot) {
+        minecraft.setScreen(new StaffDrawScreen(this, ref -> onPatternDrawnInsert(targetSlot, ref)));
+    }
+
     // ==================== Parse ====================
     /** 进入 Parse 文本模式：请求服务端把当前法术转为代码，回包后打开文本编辑器。 */
     private void enterParseMode() {
@@ -858,13 +876,13 @@ public class StaffLibScreen extends Screen {
         menuX = (int) mx;
         menuY = (int) my;
         if (menuX + MENU_WIDTH > width) menuX = width - MENU_WIDTH - 2;
-        if (menuY + MENU_ITEM_HEIGHT * 5 + 2 > height) menuY = height - MENU_ITEM_HEIGHT * 5 - 4;
+        if (menuY + MENU_ITEM_HEIGHT * 6 + 2 > height) menuY = height - MENU_ITEM_HEIGHT * 6 - 4;
         menuOpen = true;
         return true;
     }
 
     private boolean clickSequenceMenu(double mx, double my) {
-        if (mx < menuX || mx >= menuX + MENU_WIDTH || my < menuY || my >= menuY + MENU_ITEM_HEIGHT * 5 + 2) return false;
+        if (mx < menuX || mx >= menuX + MENU_WIDTH || my < menuY || my >= menuY + MENU_ITEM_HEIGHT * 6 + 2) return false;
         int item = (int) ((my - menuY - 1) / MENU_ITEM_HEIGHT);
         if (item == 2 && patternClipboard.isEmpty()) { menuOpen = false; return true; }
         switch (item) {
@@ -872,7 +890,8 @@ public class StaffLibScreen extends Screen {
             case 1 -> copyPattern();
             case 2 -> pastePatternAt(menuSlot);
             case 3 -> { int p = primarySelectedSlot(); if (p >= 0) openDrawGui(p); } // 重绘覆盖
-            case 4 -> openCastScreen(); // 真实施法采集栈
+            case 4 -> openDrawInsertBefore(menuSlot); // 向后绘制：插入到右键目标格之前
+            case 5 -> openCastScreen(); // 真实施法采集栈
             default -> { }
         }
         menuOpen = false;
@@ -881,7 +900,7 @@ public class StaffLibScreen extends Screen {
 
     /** 右键菜单（样式改编自 CyberStaff 的 drawSequenceMenu，致谢 Aurover）。z=600 抬高图层遮挡按键。 */
     private void drawSequenceMenu(GuiGraphics g, int mx, int my) {
-        int h = MENU_ITEM_HEIGHT * 5 + 2;
+        int h = MENU_ITEM_HEIGHT * 6 + 2;
         PoseStack ps = g.pose();
         ps.pushPose();
         ps.translate(0.0F, 0.0F, 600.0F);
@@ -890,9 +909,9 @@ public class StaffLibScreen extends Screen {
             g.fill(menuX, menuY, menuX + MENU_WIDTH, menuY + h, 0xF022272D);
             String[] keys = {"almightly_staff.gui.remove", "almightly_staff.gui.copy_pattern",
                 "almightly_staff.gui.paste_pattern", "almightly_staff.gui.redraw",
-                "almightly_staff.gui.cast_collect"};
+                "almightly_staff.gui.draw_backward", "almightly_staff.gui.cast_collect"};
             boolean hasSel = !selectedSlots.isEmpty();
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 6; i++) {
                 int y = menuY + 1 + i * MENU_ITEM_HEIGHT;
                 boolean hover = mx >= menuX && mx < menuX + MENU_WIDTH && my >= y && my < y + MENU_ITEM_HEIGHT;
                 boolean enabled = switch (i) {
@@ -900,7 +919,8 @@ public class StaffLibScreen extends Screen {
                     case 1 -> hasSel; // 复制选中格
                     case 2 -> !patternClipboard.isEmpty();
                     case 3 -> hasSel; // 重绘选中格
-                    case 4 -> draft != null && draft.pageIndex() > 0; // 真实施法采集栈
+                    case 4 -> draft != null && draft.pageIndex() > 0; // 向后绘制：插入
+                    case 5 -> draft != null && draft.pageIndex() > 0; // 真实施法采集栈
                     default -> true;
                 };
                 if (hover && enabled) g.fill(menuX, y, menuX + MENU_WIDTH, y + MENU_ITEM_HEIGHT, 0xAA60457B);

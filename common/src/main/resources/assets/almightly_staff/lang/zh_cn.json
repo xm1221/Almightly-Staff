@@ -49,6 +49,7 @@
   "almightly_staff.gui.copy_pattern": "复制图案",
   "almightly_staff.gui.paste_pattern": "粘贴图案",
   "almightly_staff.gui.redraw": "重绘覆盖",
+  "almightly_staff.gui.draw_backward": "向后绘制",
   "almightly_staff.gui.number_desc": "数字常量：%s",
   "almightly_staff.gui.cast_collect": "施法",
   "almightly_staff.gui.stack_collected": "已采集 %s 个栈元素",

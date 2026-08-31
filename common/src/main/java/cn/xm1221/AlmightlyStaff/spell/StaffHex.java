@@ -8,6 +8,7 @@ import at.petrak.hexcasting.client.render.PatternColors;
 import at.petrak.hexcasting.client.render.PatternRenderer;
 import at.petrak.hexcasting.client.render.WorldlyPatternRenderHelpers;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
+import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
@@ -15,9 +16,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -135,21 +138,44 @@ public final class StaffHex {
     }
 
     /** 已注册图案的本地化显示名；未知/无名称键的返回 null（调用方回退 IotaType.getDisplay）。 */
+    private static final Map<String, Component> PATTERN_NAME_CACHE = new HashMap<>();
+
     public static Component patternDisplayName(PatternRef ref) {
+        String cacheKey = (ref.actionId() == null ? "" : ref.actionId()) + "|"
+            + (ref.signature() == null ? "" : ref.signature());
+        Component cached = PATTERN_NAME_CACHE.get(cacheKey);
+        if (cached != null) return cached;
+        // 1) special handler（数字之精思：N、面具等，按形状匹配）：tryMatch 不依赖 env，客户端可安全调用
+        try {
+            var registry = IXplatAbstractions.INSTANCE.getSpecialHandlerRegistry();
+            for (var key : registry.registryKeySet()) {
+                var factory = registry.get(key);
+                if (factory == null) continue;
+                try {
+                    var handler = factory.tryMatch(patternFor(ref), null);
+                    if (handler != null) {
+                        Component name = handler.getName();
+                        PATTERN_NAME_CACHE.put(cacheKey, name);
+                        return name;
+                    }
+                } catch (Exception ignored) { }
+            }
+        } catch (Exception ignored) { }
         String id = ref.actionId();
         if (id == null || id.isEmpty()) return null;
-        if (id.startsWith("hexcasting:number/")) {
-            return Component.translatable("almightly_staff.gui.number_desc",
-                id.substring(id.lastIndexOf('/') + 1));
-        }
-        // 元图案（escape/undo/括号）：用本项目自定义译名
+        // 2) 元图案（escape/undo/括号）：用本项目自定义译名
         String metaKey = metaKey(id);
         if (metaKey != null && net.minecraft.locale.Language.getInstance().has(metaKey)) {
-            return Component.translatable(metaKey);
+            Component name = Component.translatable(metaKey);
+            PATTERN_NAME_CACHE.put(cacheKey, name);
+            return name;
         }
+        // 3) 普通注册动作官方 i18n 键
         String actKey = "hexcasting.action." + id;
         if (net.minecraft.locale.Language.getInstance().has(actKey)) {
-            return Component.translatable(actKey);
+            Component name = Component.translatable(actKey);
+            PATTERN_NAME_CACHE.put(cacheKey, name);
+            return name;
         }
         return null;
     }

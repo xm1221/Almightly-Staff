@@ -975,13 +975,32 @@ public class StaffLibScreen extends Screen {
         saveDraftNow(); // 粘贴即保存
     }
 
-    // ==================== 分享到聊天（inline 图案图标）====================
+    // ==================== 分享到聊天（HexParse 代码 + inline 图案图标）====================
 
-    /** 把当前法术页以 <dir, sig> 文本发到聊天。hexmod 的 inline 匹配器
-     *  （v0.11.3 interop/inline/HexPatternMatcher）会在各客户端聊天里把这段文本渲染成图案小图标：
-     *  悬停显示"写有该图案的卷轴"tooltip、点击复制图案串。无需本模组依赖 inline。 */
+    /** 分享入口：把整页交给服务端 HexParse（ParseIotaNbt → 代码），回传后客户端把代码发到聊天。
+     *  hexparse 的 inline 联动会把代码中的图案渲染成图标，数字等非图案 iota 以代码文本直接显示。 */
     private void shareSpellToChat() {
-        if (draft == null || draft.pageIndex() == 0 || minecraft == null || minecraft.player == null) return;
+        if (draft == null || draft.pageIndex() == 0 || minecraft == null) return;
+        if (draft.iotas().isEmpty()) {
+            showStatus(Component.translatable("almightly_staff.gui.share_nothing").getString());
+            return;
+        }
+        ModNetworking.CHANNEL.sendToServer(new ModNetworking.MsgStaffShareSpellC2S(ModNetworking.buildListTag(draft.iotas())));
+    }
+
+    /** 服务端 ParseIotaNbt 回传：非空 → 分块发聊天；空（无 hexparse 或转换失败）→ 回退 <dir,sig> 本地方案。 */
+    public void onShareCode(String code) {
+        if (code != null && !code.isBlank()) {
+            sendChatChunks((draft == null || draft.name().isEmpty() ? "?" : draft.name()) + ": " + code.trim());
+            showStatus(Component.translatable("almightly_staff.gui.share_done").getString());
+            return;
+        }
+        sharePatternsLocally(); // 兜底：纯图案 <dir,sig>（不依赖 hexparse）
+    }
+
+    /** 无 hexparse 时的兜底：把图案以 <dir, sig> 文本发到聊天（hexmod 自带 inline 匹配器渲染图标）。 */
+    private void sharePatternsLocally() {
+        if (draft == null || minecraft == null || minecraft.player == null) return;
         StringBuilder sb = new StringBuilder(draft.name().isEmpty() ? "?" : draft.name());
         sb.append(": ");
         boolean any = false;
@@ -1002,6 +1021,22 @@ public class StaffLibScreen extends Screen {
         }
         minecraft.player.connection.sendChat(sb.toString()); // 走服务端聊天广播，双方客户端都能渲染图标
         showStatus(Component.translatable("almightly_staff.gui.share_done").getString());
+    }
+
+    /** 聊天消息限 256 字符，长代码按空白分块多条发送（保序），每条均被 inline 独立扫描。 */
+    private void sendChatChunks(String text) {
+        if (minecraft == null || minecraft.player == null || text == null) return;
+        final int MAX = 200;
+        String remaining = text.trim();
+        List<String> chunks = new ArrayList<>();
+        while (remaining.length() > MAX) {
+            int cut = remaining.lastIndexOf(' ', MAX);
+            if (cut < MAX / 2) cut = MAX; // 无空白可断则硬切
+            chunks.add(remaining.substring(0, cut));
+            remaining = remaining.substring(cut).trim();
+        }
+        if (!remaining.isEmpty()) chunks.add(remaining);
+        for (String c : chunks) minecraft.player.connection.sendChat(c);
     }
 
     /** 图案 → inline 匹配文本：<方向缩写, 角度签名>（方向用 e/ne/nw/se/sw/w 缩写，无下划线）。 */

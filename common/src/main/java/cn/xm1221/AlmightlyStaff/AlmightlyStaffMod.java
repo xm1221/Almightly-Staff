@@ -2,6 +2,8 @@ package cn.xm1221.AlmightlyStaff;
 
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
+import cn.xm1221.AlmightlyStaff.parse.AlmightlyStaffParse;
+import io.yukkuric.hexparse.api.HexParseAPI;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -17,9 +19,12 @@ public final class AlmightlyStaffMod {
         // Write common init code here.
         AlmightlyStaffActions.init();
         ModNetworking.init();
+        AlmightlyStaffParse.initParse();
 
     }
     public static void FabricInit() {
         Registry.register(BuiltInRegistries.ITEM, ResourceLocation.tryBuild(AlmightlyStaffMod.MOD_ID,"all_in_one"),AlmightlyStaffMod.ALL_IN_ONE);
     }
+
+
 }

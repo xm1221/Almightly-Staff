@@ -2,6 +2,7 @@ package cn.xm1221.AlmightlyStaff;
 
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
+import cn.xm1221.AlmightlyStaff.parse.AlmightlyStaffParse;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
@@ -28,6 +29,7 @@ public final class AlmightlyStaffMod {
     public static void init() {
         AlmightlyStaffActions.init();
         ModNetworking.init();
+        AlmightlyStaffParse.initParse();
     }
 
     private static <T extends Item> T make(String id, T item) {

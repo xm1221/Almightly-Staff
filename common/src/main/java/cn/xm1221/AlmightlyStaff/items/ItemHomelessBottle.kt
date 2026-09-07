@@ -18,10 +18,13 @@ import at.petrak.hexcasting.client.ClientTickCounter
 import at.petrak.hexcasting.common.items.magic.ItemMediaHolder
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod
 import net.minecraft.nbt.CompoundTag
+import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.Style
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.TooltipFlag
 import net.minecraft.world.level.Level
 import net.minecraft.world.phys.Vec3
 import java.lang.Math.random
@@ -43,8 +46,8 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
 
     override fun getBarColor(pStack: ItemStack?): Int {
         if (pStack == null) return super.getBarColor(pStack)
-        val tag = pStack.getTag(COLOR)
-        if (tag != null) return super.getBarColor(pStack)
+        val tag = pStack.getCompound(COLOR)
+        if (tag == null || tag.isEmpty) return super.getBarColor(pStack)
         val pigment = FrozenPigment.fromNBT(tag)
         return pigment.colorProvider.getColor(
             ClientTickCounter.getTotal() / 2f,
@@ -59,6 +62,8 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
         itemStack.putTag(COLOR, tag)
         val veciota =  player.position().asActionResult[0]
         writeDatum(itemStack, veciota)
+        setMaxMedia(itemStack,1)
+        setMedia(itemStack,1)
     }
 
     override fun readIotaTag(stack: ItemStack?): CompoundTag? {
@@ -67,8 +72,9 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
     }
 
     override fun writeable(stack: ItemStack?): Boolean {
-        return false
+        return true
     }
+
 
     override fun canWrite(
         stack: ItemStack?,
@@ -97,7 +103,7 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
         val home = iota.vec3
         val pos = entity.position()
          val distance = pos.distanceTo(home).toLong()
-        if(level.gameTime % 26 == 0.toLong() && distance > 1000) {
+        if(level.gameTime % 4 == 0.toLong() && distance > 1000) {
             addMediaWithNoLimit(distance*100,itemStack)
         }
     }
@@ -126,6 +132,12 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
             }
             else stack.putLong(TAG_MAX_MEDIA, media)
         }
+    }
+
+    override fun getName(itemStack: ItemStack?): Component? {
+        val style=Style.EMPTY.withColor(getBarColor(itemStack))
+        val name =super.getName(itemStack)
+        return Component.literal("").append(name).withStyle(style)
     }
 
 

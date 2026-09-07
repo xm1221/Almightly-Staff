@@ -7,8 +7,6 @@ import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.AlmightlyStaffItems;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.item.CreativeModeTab;
 
 
 public final class AlmightlyStaffModFabric implements ModInitializer {
@@ -21,12 +19,12 @@ public final class AlmightlyStaffModFabric implements ModInitializer {
         // Run our common setup.
         AlmightlyStaffMod.init();
         AlmightlyStaffMod.FabricInit();
-        if(BuiltInRegistries.CREATIVE_MODE_TAB.getResourceKey(HexCreativeTabs.HEX).isPresent()) {
-            ItemGroupEvents.modifyEntriesEvent(BuiltInRegistries.CREATIVE_MODE_TAB.getResourceKey(HexCreativeTabs.HEX).get()).register(entries -> {
+        // 与 hexcasting 自身相同的方式：遍历所有创造标签页，向 HEX 标签页加入本模组物品
+        ItemGroupEvents.MODIFY_ENTRIES_ALL.register((tab, entries) -> {
+            if (tab == HexCreativeTabs.HEX) {
                 entries.accept(AlmightlyStaffItems.getStaff());
                 entries.accept(AlmightlyStaffItems.getHomelessBottle());
-                // ... 添加更多物品
-            });
-        }
+            }
+        });
     }
 }

@@ -1,6 +1,7 @@
 package cn.xm1221.AlmightlyStaff.items;
 
 
+import at.petrak.hexcasting.api.HexAPI;
 import at.petrak.hexcasting.api.casting.ParticleSpray;
 import at.petrak.hexcasting.api.casting.eval.env.StaffCastEnv;
 import at.petrak.hexcasting.api.casting.eval.vm.CastingVM;
@@ -15,6 +16,7 @@ import at.petrak.hexcasting.api.pigment.FrozenPigment;
 import at.petrak.hexcasting.api.utils.MathUtils;
 import at.petrak.hexcasting.api.utils.MediaHelper;
 import at.petrak.hexcasting.api.utils.NBTHelper;
+import at.petrak.hexcasting.client.ClientTickCounter;
 import at.petrak.hexcasting.common.items.HexBaubleItem;
 import at.petrak.hexcasting.common.items.storage.ItemSpellbook;
 import at.petrak.hexcasting.common.lib.HexAttributes;
@@ -53,6 +55,7 @@ import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import static at.petrak.hexcasting.api.utils.NBTHelper.getList;
 import static at.petrak.hexcasting.common.items.ItemLens.GRID_ZOOM;
@@ -316,7 +319,12 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         if (itemStack.getTag() != null && (!itemStack.hasTag() || !itemStack.getTag().contains(BAR_COLOR))) {
             return 0xb38ef3;
         }
-        return NBTHelper.getInt(itemStack, BAR_COLOR);
+        var tag = NBTHelper.getCompound(itemStack, BAR_COLOR);
+        if (tag != null) {
+             var color = FrozenPigment.fromNBT(tag).getColorProvider().getColor(ClientTickCounter.getTotal(), new Vec3(Math.random(),Math.random(),Math.random()));
+            return color;
+        }
+        return 0xb38ef3;
     }
 
     public void setBarColor(ItemStack itemStack, int color) {
@@ -335,8 +343,8 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         if(level.isClientSide) {
             return;
         }
-        var color=new StaffCastEnv((ServerPlayer) player,InteractionHand.MAIN_HAND).getPigment().getColorProvider().getColor(level.getGameTime(),player.position());
-        setBarColor(itemStack, color);
+        var color= HexAPI.instance().getColorizer(player).serializeToNBT();
+        NBTHelper.putCompound(itemStack, BAR_COLOR, color);
         NBTHelper.putLong(itemStack, "media", 0);
         NBTHelper.putLong(itemStack, "max_media", 64*MediaConstants.CRYSTAL_UNIT);
     }

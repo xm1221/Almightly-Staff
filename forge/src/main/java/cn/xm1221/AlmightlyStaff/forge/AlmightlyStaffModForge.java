@@ -33,6 +33,10 @@ public final class AlmightlyStaffModForge {
                             ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "all_in_one"),
                            AlmightlyStaffMod.ALL_IN_ONE
                     );
+                    helper.register(
+                            ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID,"homeless_bottle"),
+                            AlmightlyStaffMod.HOME_BOTTLE
+                    );
                 });
             }
             AlmightlyStaffMod.init();
@@ -40,6 +44,7 @@ public final class AlmightlyStaffModForge {
         context.getModEventBus().addListener((BuildCreativeModeTabContentsEvent event) -> {
             if (event.getTab() == HexCreativeTabs.HEX) {
                 event.accept(AlmightlyStaffItems.getStaff());
+                event.accept(AlmightlyStaffItems.getHomelessBottle());
             }
         });
 

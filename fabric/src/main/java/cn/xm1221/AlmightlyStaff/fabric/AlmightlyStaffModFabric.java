@@ -24,6 +24,7 @@ public final class AlmightlyStaffModFabric implements ModInitializer {
         if(BuiltInRegistries.CREATIVE_MODE_TAB.getResourceKey(HexCreativeTabs.HEX).isPresent()) {
             ItemGroupEvents.modifyEntriesEvent(BuiltInRegistries.CREATIVE_MODE_TAB.getResourceKey(HexCreativeTabs.HEX).get()).register(entries -> {
                 entries.accept(AlmightlyStaffItems.getStaff());
+                entries.accept(AlmightlyStaffItems.getHomelessBottle());
                 // ... 添加更多物品
             });
         }

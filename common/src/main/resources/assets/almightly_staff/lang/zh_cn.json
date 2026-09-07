@@ -7,6 +7,7 @@
   "hexcasting.page.almightly_staff.5": "右上角名称栏可重命名法术；每页有专属名字，页名即法术名。$(br2)按下$(thing)保存/$写入法术；绘制图案时会自动保存。$(br2)按下$(thing)P/$打开Parse文本编辑器，将整个法术转为HexParse代码并转回。$(br2)手持法杖按$(thing)V/$施放当前选中页。$(br2)新建、复制、删除、上移、下移管理法杖页。",
   "hexcasting.page.almightly_staff.crafting.desc": "$(italic)一即是全，全本为一",
   "item.almightly_staff.all_in_one": "万法之杖",
+  "item.almightly_staff.homeless_bottle": "游子之瓶",
   "key.almightly_staff.mode": "万法之杖执行",
   "key.almightly_staff.ide": "打开万法之杖GUI",
   "key.categories.almightly_staff": "万法之杖",

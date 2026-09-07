@@ -4,6 +4,8 @@ import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
 import cn.xm1221.AlmightlyStaff.gui.StaffLibScreen;
+import at.petrak.hexcasting.api.item.MediaHolderItem;
+import at.petrak.hexcasting.common.items.magic.ItemMediaBattery;
 import at.petrak.hexcasting.common.items.storage.ItemFocus;
 import at.petrak.hexcasting.xplat.IClientXplatAbstractions;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -45,6 +47,13 @@ public class AlmightlyStaffKeybinds {
             AlmightlyStaffMod.ALL_IN_ONE,
             ItemFocus.VARIANT_PRED,
             (stack, level, holder, holderID) -> ((ItemAlmightlyStaff) stack.getItem()).getVariant(stack)
+        );
+
+        // 注册 hexcasting:media 属性（与 ItemMediaBattery 相同），用于游子之瓶按媒质满度切换贴图
+        IClientXplatAbstractions.INSTANCE.registerItemProperty(
+            AlmightlyStaffMod.HOME_BOTTLE,
+            ItemMediaBattery.MEDIA_PREDICATE,
+            (stack, level, holder, holderID) -> ((MediaHolderItem) stack.getItem()).getMediaFullness(stack)
         );
 
         ClientTickEvent.CLIENT_POST.register(instance -> {

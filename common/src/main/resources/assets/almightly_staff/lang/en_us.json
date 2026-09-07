@@ -7,6 +7,7 @@
   "hexcasting.page.almightly_staff.5": "Rename a spell with the name field at the top right; each page has its own name, and the page name is the spell name.$(br2)Press $(thing)Save/$ to write the spell, or it is saved automatically when you draw a pattern.$(br2)Press $(thing)P/$ to open the Parse text editor, which converts the whole spell to HexParse code and back.$(br2)Press $(thing)V/$ while holding the staff to cast the selected page.$(br2)New, Copy, Delete, Up and Down manage the pages of the staff.",
   "hexcasting.page.almightly_staff.crafting.desc": "$(italic)All is one, and one is all./$",
   "item.almightly_staff.all_in_one": "Almightly Staff",
+  "item.almightly_staff.homeless_bottle": "Wanderer Bottle",
   "key.almightly_staff.mode": "Almightly Staff Casting",
   "key.almightly_staff.ide": "Open Almightly Staff GUI",
   "key.categories.almightly_staff": "Almightly Staff",

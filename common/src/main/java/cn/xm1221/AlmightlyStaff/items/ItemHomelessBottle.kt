@@ -104,8 +104,8 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
         val home = iota.vec3
         val pos = entity.position()
          val distance = pos.distanceTo(home).toLong()
-        if(level.gameTime % 4 == 0.toLong() && distance > 1000) {
-            addMediaWithNoLimit(distance*10,itemStack)
+        if(level.gameTime % 26 == 0.toLong() && distance > 1000) {
+            addMediaWithNoLimit(distance*100,itemStack)
         }
     }
 

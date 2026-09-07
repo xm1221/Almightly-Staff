@@ -321,7 +321,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         }
         var tag = NBTHelper.getCompound(itemStack, BAR_COLOR);
         if (tag != null) {
-             var color = FrozenPigment.fromNBT(tag).getColorProvider().getColor(ClientTickCounter.getTotal(), new Vec3(Math.random(),Math.random(),Math.random()));
+             var color = FrozenPigment.fromNBT(tag).getColorProvider().getColor(ClientTickCounter.getTotal(), Vec3.ZERO);
             return color;
         }
         return 0xb38ef3;

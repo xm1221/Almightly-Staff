@@ -27,7 +27,6 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.TooltipFlag
 import net.minecraft.world.level.Level
 import net.minecraft.world.phys.Vec3
-import java.lang.Math.random
 import kotlin.math.min
 
 class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties), IotaHolderItem {
@@ -49,9 +48,10 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
         val tag = pStack.getCompound(COLOR)
         if (tag == null || tag.isEmpty) return super.getBarColor(pStack)
         val pigment = FrozenPigment.fromNBT(tag)
+        // 固定位置 + 连续时间：颜色只随玩家颜色器平滑变化，不闪烁
         return pigment.colorProvider.getColor(
-            ClientTickCounter.getTotal() / 2f,
-            Vec3(random(), random(), random()),
+            ClientTickCounter.getTotal(),
+            Vec3.ZERO,
         )
     }
 
@@ -62,12 +62,13 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
         itemStack.putTag(COLOR, tag)
         val veciota =  player.position().asActionResult[0]
         writeDatum(itemStack, veciota)
-        setMaxMedia(itemStack,1)
-        setMedia(itemStack,1)
+        // 空瓶起步：0 媒质、10 万容量（=10 个紫水晶粉），离家后开始恢复并成长
+        setMaxMedia(itemStack, 100_000)
+        setMedia(itemStack, 0)
     }
 
     override fun readIotaTag(stack: ItemStack?): CompoundTag? {
-        if (stack == null || !stack.isEmpty) return null
+        if (stack == null || stack.isEmpty) return null
        return stack.getCompound(HOME)
     }
 
@@ -104,7 +105,7 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
         val pos = entity.position()
          val distance = pos.distanceTo(home).toLong()
         if(level.gameTime % 4 == 0.toLong() && distance > 1000) {
-            addMediaWithNoLimit(distance*100,itemStack)
+            addMediaWithNoLimit(distance*10,itemStack)
         }
     }
 

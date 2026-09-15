@@ -1,0 +1,40 @@
+modid = "almightly_staff"
+book = "hexcasting:thehexbook"
+
+resource_dirs = [  # top takes priority
+    "resources",
+    "{$_common.src}/main/resources",
+    "{$_fabric.src}/main/resources",
+    "{$_forge.src}/main/resources",
+    { modid="hexcasting" },
+    { modid="minecraft" },
+    { modid="hexdoc" },
+]
+export_dir = "src/hexdoc_almightly_staff/_export/generated"
+
+[template]
+icon = "{$_common.src}/main/resources/assets/almightly_staff/icon.png"
+include = [
+    "almightly_staff",
+    "hexcasting",
+    "hexdoc",
+]
+
+[template.args]
+mod_name = "Almightly Staff"
+author = "xm1221"
+show_landing_text = false
+
+[extra.hexcasting]
+# no custom patterns (entry pages are plain text/crafting only)
+
+# platforms
+
+[_common]
+src = "../common/src"
+
+[_fabric]
+src = "../fabric/src"
+
+[_forge]
+src = "../forge/src"

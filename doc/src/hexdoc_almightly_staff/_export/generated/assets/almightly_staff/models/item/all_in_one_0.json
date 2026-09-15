@@ -1,0 +1,9 @@
+{
+  "parent": "almightly_staff:item/all_in_one",
+  "textures": {
+    
+			"layer0": "almightly_staff:item/all_in_one","0": "almightly_staff:item/all_in_one",
+    "particle": "almightly_staff:item/all_in_one"
+  }
+}
+

@@ -1,0 +1,11 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "almightly_staff:item/homeless_bottle"
+  },
+  "overrides": [
+    { "predicate": { "hexcasting:media": 0.0 }, "model": "almightly_staff:item/homeless_bottle_2" },
+    { "predicate": { "hexcasting:media": 0.5 }, "model": "almightly_staff:item/homeless_bottle_1" },
+    { "predicate": { "hexcasting:media": 0.85 }, "model": "almightly_staff:item/homeless_bottle_0" }
+  ]
+}

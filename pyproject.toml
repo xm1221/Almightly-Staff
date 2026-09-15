@@ -1,0 +1,43 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+# project metadata
+
+[project]
+name = "hexdoc-almightly-staff"
+description = "Almightly Staff addon for Hex Casting."
+readme = "doc/README.md"
+authors = [
+    { name="xm1221" },
+]
+keywords = ["hexdoc"]
+requires-python = ">=3.12"
+version = "1.0"
+dependencies = [
+    "hexdoc-hexcasting~=0.11.3.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/xm1221/Almightly-Staff"
+Source = "https://github.com/xm1221/Almightly-Staff"
+
+# directory inclusion
+
+[tool.hatch.build]
+only-include = [
+    "doc/src/hexdoc_almightly_staff",
+]
+artifacts = [
+    "/doc/src/hexdoc_almightly_staff/_export/generated",
+]
+
+[tool.hatch.build.targets.wheel]
+sources = ["doc/src"]
+
+# hexdoc entry point
+
+[project.entry-points.hexdoc]
+almightly_staff = "hexdoc_almightly_staff._hooks:Almightly_staffPlugin"

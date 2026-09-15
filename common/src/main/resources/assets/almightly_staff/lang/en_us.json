@@ -54,7 +54,9 @@
   "almightly_staff.gui.number_desc": "Number literal: %s",
   "almightly_staff.gui.cast_collect": "Cast",
   "almightly_staff.gui.stack_collected": "%s stack item(s) added",
-    "almightly_staff.gui.great_spell_hint": "Enter this great spell's Parse code in the editor and convert it to add",
-"almightly_staff.gui.great_spell_unusable": "This great spell cannot be parsed, cannot add",
-  "almightly_staff.gui.great_spell_added": "Great spell added"
+  "almightly_staff.gui.great_spell_hint": "Enter this great spell's Parse code in the editor and convert it to add",
+  "almightly_staff.gui.great_spell_unusable": "This great spell cannot be parsed, cannot add",
+  "almightly_staff.gui.great_spell_added": "Great spell added",
+  "hexdoc.almightly_staff.title": "Almightly Staff",
+  "hexdoc.almightly_staff.description": "Almightly Staff guide"
 }

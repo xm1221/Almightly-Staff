@@ -54,7 +54,9 @@
   "almightly_staff.gui.number_desc": "数字常量：%s",
   "almightly_staff.gui.cast_collect": "施法",
   "almightly_staff.gui.stack_collected": "已采集 %s 个栈元素",
-    "almightly_staff.gui.great_spell_hint": "请在 Parse 编辑器中输入该卓越法术的代码并转换以添加",
-"almightly_staff.gui.great_spell_unusable": "该卓越法术无法通过 Parse 转换，不能添加",
-  "almightly_staff.gui.great_spell_added": "卓越法术已添加"
+  "almightly_staff.gui.great_spell_hint": "请在 Parse 编辑器中输入该卓越法术的代码并转换以添加",
+  "almightly_staff.gui.great_spell_unusable": "该卓越法术无法通过 Parse 转换，不能添加",
+  "almightly_staff.gui.great_spell_added": "卓越法术已添加",
+  "hexdoc.almightly_staff.title": "万法之杖",
+  "hexdoc.almightly_staff.description": "万法之杖 网页书"
 }

@@ -1,14 +1,12 @@
 # 自动发布 hexdoc 包到 PyPI
-# 触发：推送 v* tag（如 v0.0.5.21.1.20.1.1.0）或手动 workflow_dispatch
-# 认证：PyPI Trusted Publishing（OIDC）——在 pypi.org 项目设置里添加 trusted publisher：
+# 触发：push main（版本与 PyPI 最新不同时自动发布，相同则跳过）+ 手动 workflow_dispatch
+# 认证：PyPI Trusted Publishing（OIDC）——pypi.org 项目设置里添加 trusted publisher：
 #   owner=xm1221, repository=<本仓库>, workflow=publish.yml
-# 无需任何 API token / secret。
 name: publish
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -37,20 +35,22 @@ jobs:
           python -m pip install --upgrade build
           python -m build --wheel
 
-      - name: Check built version matches tag
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Check if version already published on PyPI
+        id: check
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME#v}"
-          WHEEL="$(ls dist/*.whl)"
-          VER="$(basename "$WHEEL" | sed -E 's/^[^-]+-([^-]+)-py3.*/\1/')"
-          echo "tag=$TAG wheel_version=$VER wheel=$WHEEL"
-          if [ "$TAG" != "$VER" ]; then
-            echo "::error::tag version ($TAG) != built wheel version ($VER)"
-            exit 1
+          VER="$(basename "$(ls dist/*.whl)" | sed -E 's/^[^-]+-([^-]+)-py3.*/\1/')"
+          LATEST="$(curl -s https://pypi.org/pypi/hexdoc-almightly-staff/json | python3 -c 'import sys,json;print(json.load(sys.stdin)["info"]["version"])' 2>/dev/null || true)"
+          if [ "$VER" = "$LATEST" ]; then
+            echo "Version $VER already published on PyPI - skipping upload"
+            echo "publish_needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $VER not on PyPI (latest: ${LATEST:-none}) - will publish"
+            echo "publish_needed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish package to PyPI
+        if: steps.check.outputs.publish_needed == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           attestations: false

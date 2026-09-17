@@ -1,6 +1,7 @@
 [build-system]
 requires = [
     "hatchling",
+    "hatch-gradle-version>=0.9.8",
 ]
 build-backend = "hatchling.build"
 
@@ -15,10 +16,19 @@ authors = [
 ]
 keywords = ["hexdoc"]
 requires-python = ">=3.12"
-version = "0.0.5.21.1.20.1.1.0"
+dynamic = ["version"]
 dependencies = [
     "hexdoc-hexcasting~=0.11.3.1.0",
 ]
+
+# project version（跟随 gradle.properties 的 mod_version）
+
+[tool.hatch.version]
+scheme = "gradle"
+source = "gradle-properties"
+py-path = "doc/src/hexdoc_almightly_staff/__version__.py"
+key = "mod_version"
+gradle-version-regex = { regex='^([^+]+)(\+.+)?$', repl='\1.1.20.1' }
 
 [project.urls]
 Homepage = "https://github.com/xm1221/Almightly-Staff"
@@ -29,9 +39,11 @@ Source = "https://github.com/xm1221/Almightly-Staff"
 [tool.hatch.build]
 only-include = [
     "doc/src/hexdoc_almightly_staff",
+    "gradle.properties",
 ]
 artifacts = [
     "/doc/src/hexdoc_almightly_staff/_export/generated",
+    "/doc/src/hexdoc_almightly_staff/__gradle_version__.py",
 ]
 
 [tool.hatch.build.targets.wheel]

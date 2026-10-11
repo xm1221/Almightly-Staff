@@ -1,6 +1,7 @@
 package cn.xm1221.AlmightlyStaff.parse
 
 import at.petrak.hexcasting.api.utils.getOrCreateCompound
+import at.petrak.hexcasting.common.items.storage.ItemSpellbook
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.item.ItemStack

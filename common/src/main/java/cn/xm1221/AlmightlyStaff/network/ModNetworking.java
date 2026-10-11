@@ -128,7 +128,20 @@ public class ModNetworking {
     }
     public record MsgStaffEscapePatternC2S(HexPattern pattern) {
         public static void encode(MsgStaffEscapePatternC2S m, FriendlyByteBuf b) { b.writeNbt(m.pattern.serializeToNBT()); } public static MsgStaffEscapePatternC2S decode(FriendlyByteBuf b) { return new MsgStaffEscapePatternC2S(HexPattern.fromNBT(b.readNbt())); }
-        public static void handle(MsgStaffEscapePatternC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return; ctx.get().queue(() -> { var st = s.getMainHandItem(); if (st.getItem() instanceof ItemAlmightlyStaff it) { it.writeDatum(st, null); it.writeDatum(st, new PatternIota(m.pattern)); it.casting(s.level(), s, InteractionHand.MAIN_HAND); CHANNEL.sendToPlayer(s, new MsgStaffEscapeResultS2C(it.readIota(st, s.serverLevel()))); } }); }
+        public static void handle(MsgStaffEscapePatternC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null;
+            if (s == null) return;
+            ctx.get().queue(() -> {
+                var st = s.getMainHandItem();
+                if (!(st.getItem() instanceof ItemAlmightlyStaff it)) return;
+                // 冷却中：先不改写当前页也不施放，否则会出现「页面被改成 escape 图案但法术没放出去」
+                if (it.isOnCooldown(s)) return;
+                it.writeDatum(st, null);
+                it.writeDatum(st, new PatternIota(m.pattern));
+                it.casting(s.level(), s, InteractionHand.MAIN_HAND);
+                CHANNEL.sendToPlayer(s, new MsgStaffEscapeResultS2C(it.readIota(st, s.serverLevel())));
+            });
+        }
     }
     public record MsgStaffEscapeResultS2C(Iota iota) {
         public static void encode(MsgStaffEscapeResultS2C m, FriendlyByteBuf b) { b.writeBoolean(m.iota != null); if (m.iota != null) b.writeNbt(IotaType.serialize(m.iota)); }

@@ -102,6 +102,12 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     /** 按 V 键时由服务端调用，直接施放当前页法术 */
     public void casting(Level world, Player player, InteractionHand usedHand) {
+        // 冷却中直接忽略。施放只发生在服务端，这里是唯一的判定点：
+        // V 键(MsgAlmightlyStaffModeC2S)、直接施放(MsgStaffCastC2S)、Escape(MsgStaffEscapePatternC2S) 都走这里。
+        // 原版只在客户端 MultiPlayerGameMode#useItem 里查冷却，自定义封包路径完全绕过了它。
+        if (isOnCooldown(player)) {
+            return;
+        }
         ItemStack stack = player.getItemInHand(usedHand);
         if (!hasHex(stack)) {
             return;
@@ -148,6 +154,11 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     private int cooldown() {
         return HexConfig.common().artifactCooldown();
+    }
+
+    /** 该玩家手里的这把法杖是否还在冷却中（服务端判定用，客户端也可读同步过来的冷却）。 */
+    public boolean isOnCooldown(Player player) {
+        return player.getCooldowns().isOnCooldown(this);
     }
 
     @Override

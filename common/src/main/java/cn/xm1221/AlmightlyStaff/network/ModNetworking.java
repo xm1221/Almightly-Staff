@@ -197,7 +197,13 @@ public class ModNetworking {
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
         static void handle(MsgStaffEscapePatternC2S msg, NetworkManager.PacketContext ctx) {
             var s = ctx.getPlayer(); if (!(s instanceof ServerPlayer sp)) return;
-            ctx.queue(() -> { var st = sp.getMainHandItem(); if (st.getItem() instanceof ItemAlmightlyStaff it) { it.writeDatum(st, null); it.writeDatum(st, new PatternIota(msg.pattern)); it.casting(sp.level(), sp, InteractionHand.MAIN_HAND); sendToPlayer(sp, new MsgStaffEscapeResultS2C(it.readIota(st))); } });
+            ctx.queue(() -> {
+                var st = sp.getMainHandItem();
+                if (!(st.getItem() instanceof ItemAlmightlyStaff it)) return;
+                // 冷却中：先不改写当前页也不施放，否则会出现「页面被改成 escape 图案但法术没放出去」
+                if (it.isOnCooldown(sp)) return;
+                it.writeDatum(st, null); it.writeDatum(st, new PatternIota(msg.pattern)); it.casting(sp.level(), sp, InteractionHand.MAIN_HAND); sendToPlayer(sp, new MsgStaffEscapeResultS2C(it.readIota(st)));
+            });
         }
     }
     public static class MsgStaffEscapeResultS2C implements CustomPacketPayload {

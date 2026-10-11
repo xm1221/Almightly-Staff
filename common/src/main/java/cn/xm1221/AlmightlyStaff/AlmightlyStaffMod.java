@@ -21,7 +21,7 @@ public final class AlmightlyStaffMod {
     public static final Item HOME_BOTTLE = new ItemHomelessBottle(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1));
 
     public static void init() {
-        // Write common init code here.
+        AlmightlyStaffConfig.load();
         AlmightlyStaffActions.init();
         ModNetworking.init();
         AlmightlyStaffParse.initParse();

@@ -2,6 +2,7 @@ package cn.xm1221.AlmightlyStaff.items;
 
 
 import at.petrak.hexcasting.api.HexAPI;
+import cn.xm1221.AlmightlyStaff.AlmightlyStaffConfig;
 import at.petrak.hexcasting.api.casting.ParticleSpray;
 import at.petrak.hexcasting.api.casting.eval.env.StaffCastEnv;
 import at.petrak.hexcasting.api.casting.eval.vm.CastingVM;
@@ -303,10 +304,14 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public void inventoryTick(ItemStack itemStack, Level level, Entity entity, int i, boolean bl) {
-        if(entity instanceof Allay ||entity instanceof ServerPlayer) {
-            var media=getMedia(itemStack);
-            if(media<getMaxMedia(itemStack) && level.getGameTime()%260==0) {
-                addMedia(itemStack, (long) (media+20*MediaConstants.DUST_UNIT));
+        if (level.isClientSide) return;
+        var config = AlmightlyStaffConfig.get();
+        if (!config.mediaRegenEnabled) return;
+        if (entity instanceof Allay || entity instanceof ServerPlayer) {
+            var media = getMedia(itemStack);
+            int interval = config.mediaRegenIntervalTicks;
+            if (media < getMaxMedia(itemStack) && level.getGameTime() % interval == 0) {
+                addMedia(itemStack, media + (long) config.mediaRegenAmountDust * MediaConstants.DUST_UNIT);
             }
         }
     }

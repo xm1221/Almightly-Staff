@@ -18,7 +18,7 @@ keywords = ["hexdoc"]
 requires-python = ">=3.12"
 dynamic = ["version"]
 dependencies = [
-    "hexdoc-hexcasting~=0.11.3.1.0",
+    "hexdoc-hexcasting~=0.11.4.1.0",
 ]
 
 # project version（跟随 gradle.properties 的 mod_version）

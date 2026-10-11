@@ -16,6 +16,11 @@ public final class AlmightlyStaffMod {
     public static final String MOD_ID = "almightly_staff";
 
     public static void registerItems(BiConsumer<Item, ResourceLocation> r) {
+        // 1.21 Item 构造会 createIntrusiveHolder，必须在 RegisterEvent 解冻期间 new，不能放静态初始化。
+        if (ALL_IN_ONE == null) {
+            ALL_IN_ONE = make("all_in_one",
+                new ItemAlmightlyStaff(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1)));
+        }
         for (var e : ITEMS.entrySet()) {
             r.accept(e.getValue(), e.getKey());
         }
@@ -23,8 +28,7 @@ public final class AlmightlyStaffMod {
 
     private static final Map<ResourceLocation, Item> ITEMS = new LinkedHashMap<>();
 
-    public static final Item ALL_IN_ONE = make("all_in_one",
-        new ItemAlmightlyStaff(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1)));
+    public static Item ALL_IN_ONE;
 
     public static void init() {
         AlmightlyStaffActions.init();

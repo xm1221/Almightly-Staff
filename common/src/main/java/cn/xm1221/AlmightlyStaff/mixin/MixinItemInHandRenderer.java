@@ -37,10 +37,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ItemInHandRenderer.class)
 public abstract class MixinItemInHandRenderer {
 
-    @Shadow private ItemStack mainHandItem;
-    @Shadow private ItemStack offHandItem;
+    // NeoForge 1.21 运行时是 Mojmap；Mixin AP 默认 remap 会把目标写成 Yarn class_759 导致启动崩溃。
+    // 与 MixinScreen.renderBackground 一样保持 remap=false。
+    @Shadow(remap = false) private ItemStack mainHandItem;
+    @Shadow(remap = false) private ItemStack offHandItem;
 
-    @Inject(method = "tick", at = @At("HEAD"))
+    @Inject(method = "tick", at = @At("HEAD"), remap = false)
     private void almightly$ignoreStaffMediaRecharge(CallbackInfo ci) {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {

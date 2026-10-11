@@ -37,7 +37,7 @@ dependencies {
 
     common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
-    modImplementation fileTree(dir: "libs", include: '*.jar')
+    modImplementation fileTree(dir: "../libs", include: '*.jar')
 }
 
 processResources {

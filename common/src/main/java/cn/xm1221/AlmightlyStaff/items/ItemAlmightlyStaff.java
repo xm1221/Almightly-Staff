@@ -304,6 +304,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public void inventoryTick(ItemStack itemStack, Level level, Entity entity, int i, boolean bl) {
+        super.inventoryTick(itemStack, level, entity, i, bl);
         if (level.isClientSide) return;
         var config = AlmightlyStaffConfig.get();
         if (!config.mediaRegenEnabled) return;

@@ -1,5 +1,6 @@
 {
     "type": "minecraft:crafting_shaped",
+    "category": "equipment",
     "pattern": [
         " ab",
         " ca",
@@ -20,7 +21,7 @@
         }
     },
     "result":{
-        "item": "almightly_staff:all_in_one",
+        "id": "almightly_staff:all_in_one",
         "count": 1
     }
 }

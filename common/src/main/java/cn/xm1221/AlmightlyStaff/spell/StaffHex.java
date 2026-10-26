@@ -57,8 +57,8 @@ public final class StaffHex {
             ResourceLocation id = registry.getKey(entry);
             if (id == null) continue;
             HexPattern proto = entry.prototype();
-            String direction = proto.getStartDir().name();
-            String signature = proto.anglesSignature();
+            String direction = proto.getOrientation().name();
+            String signature = proto.getSignature().toAnglesString();
             boolean perWorld = registry.getHolder(id).map(h -> h.is(TagKey.create(registry.key(), PER_WORLD_TAG))).orElse(false);
             if (perWorld) {
                 worldIds.add(id.toString());
@@ -95,12 +95,12 @@ public final class StaffHex {
 
     /** 把 HexPattern 解析为 PatternRef（尽量匹配注册表动作ID）。 */
     public static PatternRef refFor(HexPattern pattern) {
-        String dir = pattern.getStartDir().name();
-        String sig = pattern.anglesSignature();
+        String dir = pattern.getOrientation().name();
+        String sig = pattern.getSignature().toAnglesString();
         for (ActionRegistryEntry entry : actionRegistry()) {
             HexPattern proto = entry.prototype();
-            if (proto.getStartDir() == pattern.getStartDir()
-                && proto.anglesSignature().equals(sig)) {
+            if (proto.getOrientation() == pattern.getOrientation()
+                && proto.getSignature().toAnglesString().equals(sig)) {
                 ResourceLocation id = actionRegistry().getKey(entry);
                 if (id != null) return new PatternRef(id.toString(), dir, sig);
             }
@@ -111,7 +111,7 @@ public final class StaffHex {
     /** 把 PatternRef 还原为 HexPattern。 */
     public static HexPattern patternFor(PatternRef ref) {
         HexDir dir = dirFor(ref.startDirection());
-        return HexPattern.fromAnglesUnchecked(ref.signature(), dir);
+        return HexPattern.fromAngleString(ref.signature(), dir, false);
     }
 
     /** 渲染图案（卷轴可读样式）。返回是否成功。 */

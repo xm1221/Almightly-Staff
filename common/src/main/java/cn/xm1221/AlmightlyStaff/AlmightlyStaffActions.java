@@ -25,7 +25,7 @@ public class AlmightlyStaffActions {
             if (key == null) {
                 throw new IllegalArgumentException("无效的动作 ID: " + id);
             }
-            ActionRegistryEntry entry = new ActionRegistryEntry(HexPattern.fromAngles(angles, startDir), action);
+            ActionRegistryEntry entry = new ActionRegistryEntry(HexPattern.fromAngleString(angles, startDir), action);
             Registry.register(
                     HexActions.REGISTRY,
                     nsid,

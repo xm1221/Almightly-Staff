@@ -573,8 +573,8 @@ public class ModNetworking {
                         boolean unlocked = GreatPatternUnlocker.get(level).isUnlocked(msg.actionId);
                         if (unlocked) {
                             usable = true;
-                            sig = pi.getPattern().anglesSignature();
-                            dir = pi.getPattern().getStartDir().name();
+                            sig = pi.getPattern().getSignature().toAnglesString();
+                            dir = pi.getPattern().getOrientation().name();
                         }
                     }
                 } catch (Exception ignored) { }

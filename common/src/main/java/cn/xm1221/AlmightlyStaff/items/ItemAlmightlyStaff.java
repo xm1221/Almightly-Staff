@@ -360,6 +360,11 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         if(level.isClientSide) {
             return;
         }
+        // 只有全新合成的法杖才初始化。封印配方（SealStaffRecipe）产出的法杖会沿用原料的 NBT，
+        // 这里重置会把已存的媒质和条颜色清掉。
+        if (NBTHelper.hasLong(itemStack, "max_media")) {
+            return;
+        }
         var color= HexAPI.instance().getColorizer(player).serializeToNBT();
         NBTHelper.putCompound(itemStack, BAR_COLOR, color);
         NBTHelper.putLong(itemStack, "media", 0);

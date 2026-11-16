@@ -20,10 +20,12 @@ architectury {
     common rootProject.enabled_platforms.split(',')
 }
 
+// 页存储（StaffPages）的纯 NBT 逻辑走 JUnit 5 单测：src/test/java 只编译进 test 源集，
+// 不能塞进 main 源集（否则 JUnit 依赖会污染 mod 产物）。
 sourceSets {
-    main {
-        java.srcDirs += 'src/test/java'
-        resources.srcDirs += 'src/test/resources'
+    test {
+        java.srcDirs = ['src/test/java']
+        resources.srcDirs = ['src/test/resources']
     }
 }
 
@@ -42,6 +44,17 @@ dependencies {
     //compileOnly ("maven.modrinth:patchouli:${minecraft_version}-${patchouli_version}-forge")
     compileOnly "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     //modImplementation fileTree(dir: "libs", include: '*.jar')
+
+    testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "failed", "skipped"
+        exceptionFormat "full"
+    }
 }
 compileKotlin {
     kotlinOptions {

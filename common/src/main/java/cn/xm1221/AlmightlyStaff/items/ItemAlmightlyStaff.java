@@ -137,8 +137,8 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         }
 
         List<Iota> instrs = getHex(stack, (ServerLevel) world);
-        if (instrs == null) {
-            return;
+        if (instrs == null || instrs.isEmpty()) {
+            return; // 当前页是空页：V 键什么也不做
         }
         var sPlayer = (ServerPlayer) player;
         var ctx = new StaffCastEnv(sPlayer, usedHand);
@@ -202,9 +202,13 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     public @Nullable List<Iota> getHex(ItemStack stack, ServerLevel level) {
         Iota hex = readIota(stack, level);
         List<Iota> list = new ArrayList<>();
+        // 页号可能指向一个空页（空页是合法的一页，见 StaffPages），此时没有任何可施放的 iota
+        if (hex == null) {
+            return list;
+        }
         if(hex instanceof ListIota){
            for (Iota iota:((ListIota)hex).getList()){
-               list.add(iota);
+               if (iota != null) list.add(iota);
            }
            return list;
         }

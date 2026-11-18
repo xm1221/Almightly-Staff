@@ -12,7 +12,9 @@ import at.petrak.hexcasting.common.msgs.MsgNewSpiralPatternsS2C;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
+import cn.xm1221.AlmightlyStaff.parse.HexParseBridge;
 import dev.architectury.networking.NetworkChannel;
+import dev.architectury.platform.Platform;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import at.petrak.hexcasting.common.lib.hex.HexIotaTypes;
@@ -153,13 +155,38 @@ public class ModNetworking {
         public static void handle(MsgParseToCodeC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
             ctx.get().queue(() -> {
-                try { String code = io.yukkuric.hexparse.parsers.ParserMain.ParseIotaNbt(m.listNbt, s, x -> x); CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C(code)); }
-                catch (Exception e) { CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C("")); }
+                if (!Platform.isModLoaded("hexparse")) {
+                    CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C(""));
+                    return;
+                }
+                try {
+                    String code = HexParseBridge.parseIotaNbt(m.listNbt, s);
+                    CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C(code));
+                } catch (Throwable e) {
+                    CHANNEL.sendToPlayer(s, new MsgParseToCodeS2C(""));
+                }
             });
         }
     }
     public record MsgParseToCodeS2C(String code) { public static void encode(MsgParseToCodeS2C m, FriendlyByteBuf b) { b.writeUtf(m.code); } public static MsgParseToCodeS2C decode(FriendlyByteBuf b) { return new MsgParseToCodeS2C(b.readUtf()); } public static void handle(MsgParseToCodeS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { Minecraft.getInstance().execute(() -> { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr) scr.onParseCode(m.code); }); } }
-    public record MsgParseToIotasC2S(String code) { public static void encode(MsgParseToIotasC2S m, FriendlyByteBuf b) { b.writeUtf(m.code); } public static MsgParseToIotasC2S decode(FriendlyByteBuf b) { return new MsgParseToIotasC2S(b.readUtf()); } public static void handle(MsgParseToIotasC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return; ctx.get().queue(() -> { try { var tag = io.yukkuric.hexparse.parsers.ParserMain.ParseCode(m.code, s); CHANNEL.sendToPlayer(s, new MsgParseToIotasS2C(IotaType.deserialize(tag, s.serverLevel()))); } catch (Exception e) { CHANNEL.sendToPlayer(s, new MsgParseToIotasS2C(null)); } }); } }
+    public record MsgParseToIotasC2S(String code) {
+        public static void encode(MsgParseToIotasC2S m, FriendlyByteBuf b) { b.writeUtf(m.code); }
+        public static MsgParseToIotasC2S decode(FriendlyByteBuf b) { return new MsgParseToIotasC2S(b.readUtf()); }
+        public static void handle(MsgParseToIotasC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                if (!Platform.isModLoaded("hexparse")) {
+                    CHANNEL.sendToPlayer(s, new MsgParseToIotasS2C(null));
+                    return;
+                }
+                try {
+                    CHANNEL.sendToPlayer(s, new MsgParseToIotasS2C(HexParseBridge.parseCodeToIota(m.code, s)));
+                } catch (Throwable e) {
+                    CHANNEL.sendToPlayer(s, new MsgParseToIotasS2C(null));
+                }
+            });
+        }
+    }
     public record MsgParseToIotasS2C(Iota iota) { public static void encode(MsgParseToIotasS2C m, FriendlyByteBuf b) { b.writeBoolean(m.iota != null); if (m.iota != null) b.writeNbt(IotaType.serialize(m.iota)); } public static MsgParseToIotasS2C decode(FriendlyByteBuf b) { if (!b.readBoolean()) return new MsgParseToIotasS2C(null); try { return new MsgParseToIotasS2C(IotaType.deserialize(b.readNbt(), null)); } catch (Exception e) { return new MsgParseToIotasS2C(null); } } public static void handle(MsgParseToIotasS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) { Minecraft.getInstance().execute(() -> { var s = Minecraft.getInstance().screen; if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffParseScreen scr) scr.onParseResult(m.iota); }); } }
 
     // ==================== 法术库（页同步） ====================
@@ -448,25 +475,16 @@ public class ModNetworking {
         public static void handle(MsgStaffGreatSpellCheckC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
             ctx.get().queue(() -> {
-                boolean usable = false; String sig = ""; String dir = "";
+                if (!Platform.isModLoaded("hexparse")) {
+                    CHANNEL.sendToPlayer(s, new MsgStaffGreatSpellCheckS2C(m.actionId, false, "", ""));
+                    return;
+                }
                 try {
-                    var level = s.serverLevel();
-                    io.yukkuric.hexparse.hooks.PatternMapper.init(level);
-                    // jar 版本 mapPatternWorld 值为序列化后的 NBT 标签，需反序列化得到图案
-                    var tag = io.yukkuric.hexparse.hooks.PatternMapper.mapPatternWorld.get(m.actionId);
-                    if (tag != null) {
-                        Iota i = IotaType.deserialize(tag, level);
-                        if (i instanceof at.petrak.hexcasting.api.casting.iota.PatternIota pi) {
-                            boolean unlocked = io.yukkuric.hexparse.hooks.GreatPatternUnlocker.get(level).isUnlocked(m.actionId);
-                            if (unlocked) {
-                                usable = true;
-                                sig = pi.getPattern().anglesSignature();
-                                dir = pi.getPattern().getStartDir().name();
-                            }
-                        }
-                    }
-                } catch (Exception ignored) { }
-                CHANNEL.sendToPlayer(s, new MsgStaffGreatSpellCheckS2C(m.actionId, usable, sig, dir));
+                    var res = HexParseBridge.checkGreatSpell(s.serverLevel(), m.actionId);
+                    CHANNEL.sendToPlayer(s, new MsgStaffGreatSpellCheckS2C(m.actionId, res.usable(), res.signature(), res.startDir()));
+                } catch (Throwable ignored) {
+                    CHANNEL.sendToPlayer(s, new MsgStaffGreatSpellCheckS2C(m.actionId, false, "", ""));
+                }
             });
         }
     }

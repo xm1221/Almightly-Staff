@@ -13,8 +13,8 @@ import hexdoc_almightly_staff
 
 # 静态版本（不依赖 hatch-gradle-version / __gradle_version__.py，该文件被 .gitignore 忽略）
 MOD_ID = "almightly_staff"
-MOD_VERSION = "0.0.5.21"
-FULL_VERSION = "0.0.5.21.1.0"
+MOD_VERSION = "0.0.5.241"
+FULL_VERSION = "0.0.5.241.1.0"
 PY_VERSION = "1.0"
 
 

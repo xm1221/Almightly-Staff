@@ -45,8 +45,8 @@ dependencies {
     implementation ("maven.modrinth:caelus:${caelus_version}")
     //implementation ("maven.modrinth:inline:${inline_version}-forge")
     implementation ("maven.modrinth:patchouli:${minecraft_version}-${patchouli_version}-forge")
-    implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:0.2.0"))
-    implementation(include("io.github.llamalad7:mixinextras-forge:0.2.0"))
+    implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:0.5.0"))
+    implementation(include("io.github.llamalad7:mixinextras-forge:0.5.0"))
     implementation ("at.petra-k.paucal:paucal-forge-${minecraft_version}:${paucal_version}")
     implementation ("at.petra-k.hexcasting:hexcasting-forge-${minecraft_version}:${hexcasting_version}")
 

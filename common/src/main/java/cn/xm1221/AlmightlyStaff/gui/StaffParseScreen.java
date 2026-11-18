@@ -56,9 +56,14 @@ public class StaffParseScreen extends Screen {
 
     /** 服务端解析完成回传。 */
     public void onParseResult(Iota iota) {
+        if (iota == null) {
+            callback.accept(null);
+            onClose();
+            return;
+        }
         List<Iota> list = new ArrayList<>();
         if (iota instanceof ListIota li) for (var x : li.getList()) list.add(x);
-        else if (iota != null) list.add(iota);
+        else list.add(iota);
         callback.accept(list);
         onClose();
     }

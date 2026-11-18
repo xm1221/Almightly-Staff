@@ -27,8 +27,9 @@ public final class AlmightlyStaffModForge {
     public AlmightlyStaffModForge(FMLJavaModLoadingContext context) {
         // Submit our event bus to let Architectury API register our content on the right time.
         EventBuses.registerModEventBus(AlmightlyStaffMod.MOD_ID, context.getModEventBus());
-        // Run our common setup.
-        context.getModEventBus().addListener((RegisterEvent event) ->{
+        // Run our common setup once during mod construction (must not run inside RegisterEvent, which fires per registry key).
+        AlmightlyStaffMod.init();
+        context.getModEventBus().addListener((RegisterEvent event) -> {
             if (event.getRegistryKey().equals(ForgeRegistries.Keys.ITEMS)) {
                 event.register(ForgeRegistries.Keys.ITEMS, helper -> {
                     helper.register(
@@ -46,7 +47,6 @@ public final class AlmightlyStaffModForge {
                 event.<RecipeSerializer<?>>register(ForgeRegistries.Keys.RECIPE_SERIALIZERS, helper ->
                         AlmightlyStaffRecipes.register((serializer, id) -> helper.register(id, serializer)));
             }
-            AlmightlyStaffMod.init();
         });
         context.getModEventBus().addListener((BuildCreativeModeTabContentsEvent event) -> {
             if (event.getTab() == HexCreativeTabs.HEX) {

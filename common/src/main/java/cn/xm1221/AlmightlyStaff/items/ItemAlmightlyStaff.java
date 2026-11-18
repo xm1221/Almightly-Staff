@@ -28,7 +28,6 @@ import at.petrak.hexcasting.common.msgs.MsgOpenSpellGuiS2C;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import io.yukkuric.hexparse.api.HexParseAPI;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;

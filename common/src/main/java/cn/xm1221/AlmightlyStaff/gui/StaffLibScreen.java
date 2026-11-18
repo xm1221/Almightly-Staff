@@ -1215,6 +1215,10 @@ public class StaffLibScreen extends Screen {
     /** 进入 Parse 文本模式：请求服务端把当前页转为代码，回包后打开文本编辑器。 */
     private void enterParseMode() {
         if (!canEditContent()) return;
+        if (!dev.architectury.platform.Platform.isModLoaded("hexparse")) {
+            showStatus(Component.translatable("almightly_staff.gui.hexparse_missing").getString());
+            return;
+        }
         flushRename();
         ModNetworking.CHANNEL.sendToServer(new ModNetworking.MsgParseToCodeC2S(ModNetworking.buildListTag(draftIotas)));
     }

@@ -8,7 +8,6 @@ import at.petrak.hexcasting.client.render.PatternColors;
 import at.petrak.hexcasting.client.render.PatternRenderer;
 import at.petrak.hexcasting.client.render.WorldlyPatternRenderHelpers;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
-import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
@@ -53,28 +52,33 @@ public final class StaffHex {
     public static List<PatternCatalogEntry> loadCatalog() {
         Registry<ActionRegistryEntry> registry = actionRegistry();
         List<PatternCatalogEntry> output = new ArrayList<>();
+        Set<String> worldIds = new HashSet<>();
         for (ActionRegistryEntry entry : registry) {
-            ResourceLocation id = registry.getKey(entry);
-            if (id == null) continue;
-            HexPattern proto = entry.prototype();
-            String direction = proto.getStartDir().name();
-            String signature = proto.anglesSignature();
-            PatternRef ref = new PatternRef(id.toString(), direction, signature);
-            if (registry.getHolderOrThrow(registry.getResourceKey(entry).orElseThrow())
-                .is(TagKey.create(registry.key(), PER_WORLD_TAG))) {
-                // per-world：无固定签名（枚举已移除，仅作目录占位）
-                output.add(new PatternCatalogEntry(
-                    new PatternRef(id.toString(), "EAST", ""),
-                    Component.translatable("hexcasting.action." + id),
-                    PatternCatalogEntry.Kind.PER_WORLD));
-                continue;
-            }
-            if (isMeta(ref)) {
-                output.add(new PatternCatalogEntry(ref, metaDisplayName(id.toString()), PatternCatalogEntry.Kind.META));
-            } else {
-                output.add(new PatternCatalogEntry(ref, Component.translatable("hexcasting.action." + id)));
-            }
+            try {
+                ResourceLocation id = registry.getKey(entry);
+                if (id == null) continue;
+                HexPattern proto = entry.prototype();
+                String direction = proto.getStartDir().name();
+                String signature = proto.anglesSignature();
+                PatternRef ref = new PatternRef(id.toString(), direction, signature);
+                if (registry.getHolderOrThrow(registry.getResourceKey(entry).orElseThrow())
+                    .is(TagKey.create(registry.key(), PER_WORLD_TAG))) {
+                    worldIds.add(id.toString());
+                    // per-world：无固定签名（枚举已移除，仅作目录占位）
+                    output.add(new PatternCatalogEntry(
+                        new PatternRef(id.toString(), "EAST", ""),
+                        Component.translatable("hexcasting.action." + id),
+                        PatternCatalogEntry.Kind.PER_WORLD));
+                    continue;
+                }
+                if (isMeta(ref)) {
+                    output.add(new PatternCatalogEntry(ref, metaDisplayName(id.toString()), PatternCatalogEntry.Kind.META));
+                } else {
+                    output.add(new PatternCatalogEntry(ref, Component.translatable("hexcasting.action." + id)));
+                }
+            } catch (Exception ignored) { } // 单个条目异常跳过，不阻塞整个目录
         }
+        perWorldActionIds = worldIds;
         // 补全内置元图案
         for (MetaPattern meta : META_PATTERNS) {
             boolean present = false;

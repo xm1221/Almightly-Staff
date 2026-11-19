@@ -19,6 +19,8 @@ public final class AlmightlyStaffConfig {
     public int mediaRegenIntervalTicks = 260;
     /** Dust restored each interval. 0 restores nothing. */
     public int mediaRegenAmountDust = 20;
+    /** Enable the IDEA-style staff spell IDE screen instead of legacy StaffLibScreen. */
+    public boolean useIdeScreen = true;
 
     public static AlmightlyStaffConfig get() {
         return instance;

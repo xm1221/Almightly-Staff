@@ -3,6 +3,7 @@ package cn.xm1221.AlmightlyStaff.gui;
 import at.petrak.hexcasting.api.casting.eval.ResolvedPatternType;
 import at.petrak.hexcasting.api.casting.math.HexPattern;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.phys.Vec2;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -21,4 +22,7 @@ public interface IdeSpellcastingAccess {
     void setStackClear$ide();
     /** 读取本地施法栈（GuiSpellcasting 的 cachedStack，显示在侧栏的那份）。 */
     List<CompoundTag> getStack$ide();
+    void setHexSizeOverride$ide(float hexSize);
+    void setCoordsOffsetOverride$ide(@Nullable Vec2 offset);
+    void recalcDisplays$ide();
 }

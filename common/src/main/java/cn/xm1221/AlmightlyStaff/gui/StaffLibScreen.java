@@ -14,6 +14,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.locale.Language;
 import net.minecraft.nbt.CompoundTag;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
+import cn.xm1221.AlmightlyStaff.network.StaffSyncReceiver;
 import cn.xm1221.AlmightlyStaff.spell.PatternCatalogEntry;
 import cn.xm1221.AlmightlyStaff.spell.PatternRef;
 import cn.xm1221.AlmightlyStaff.spell.StaffHex;
@@ -44,7 +45,7 @@ import java.util.Set;
  * 图案槽位样式、右键菜单、滚动条等视觉与交互设计均改编自 CyberStaff
  * （https://github.com/Aurover/Hex-CyberStaff），向 ta 致敬。
  */
-public class StaffLibScreen extends Screen {
+public class StaffLibScreen extends Screen implements StaffSyncReceiver {
     private static final int MARGIN = 8;
     private static final int GAP = 6;
     private static final int LIST_TOP = 70;
@@ -137,8 +138,10 @@ public class StaffLibScreen extends Screen {
     // ==================== 网络同步 ====================
 
     /** 同步入口。incremental=true 表示操作后的增量回发（只带受影响页），按 pageIndex 合并；否则为全量分块同步。 */
+    @Override
     public void onSyncChunk(List<ModNetworking.PageData> chunkPages, int castPage, int focusPage,
-                            List<Integer> removed, boolean lastChunk, boolean incremental, String status) {
+                            List<Integer> removed, boolean lastChunk, boolean incremental,
+                            String status, String staffUuid) {
         if (incremental) {
             onIncrementalSync(chunkPages, castPage, focusPage, removed, status);
             return;
@@ -1741,6 +1744,7 @@ public class StaffLibScreen extends Screen {
     }
 
     /** 服务端回传：已学习则返回真实签名/方向，可添加；否则拒绝。 */
+    @Override
     public void onGreatSpellCheck(String actionId, boolean usable, String signature, String startDir) {
         String pendingAction = pendingGreatSpellAction;
         int slot = pendingGreatSpellSlot;

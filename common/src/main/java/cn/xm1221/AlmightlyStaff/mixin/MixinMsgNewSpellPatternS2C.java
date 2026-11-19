@@ -2,6 +2,7 @@ package cn.xm1221.AlmightlyStaff.mixin;
 
 import at.petrak.hexcasting.common.msgs.MsgNewSpellPatternS2C;
 import cn.xm1221.AlmightlyStaff.gui.StaffCastScreen;
+import cn.xm1221.AlmightlyStaff.gui.ide.StaffIdeScreen;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -21,6 +22,8 @@ public abstract class MixinMsgNewSpellPatternS2C {
             var s = Minecraft.getInstance().screen;
             if (s instanceof StaffCastScreen scs) {
                 scs.onServerUpdate(self.info(), self.index());
+            } else if (s instanceof StaffIdeScreen ide) {
+                ide.onSpellcastingServerUpdate(self.info(), self.index());
             }
         });
     }

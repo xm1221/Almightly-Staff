@@ -6,7 +6,9 @@
   "client": [
     "MixinGuiSpellcasting",
     "MixinItemInHandRenderer",
-    "MixinMsgNewSpellPatternS2C"
+    "MixinMinecraft",
+    "MixinMsgNewSpellPatternS2C",
+    "MixinScreen"
   ],
   "mixins": [
 

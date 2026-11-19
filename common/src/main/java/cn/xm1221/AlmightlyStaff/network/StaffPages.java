@@ -13,6 +13,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 万法之杖页存储的唯一入口。
@@ -180,6 +181,29 @@ public final class StaffPages {
     private static final String KEY_PAGE_NAMES = "page_names";
     private static final String KEY_SELECTED_PAGE = "page_idx";
     private static final String KEY_SEALED = "sealed_pages";
+    public static final String KEY_STAFF_UUID = "staff_uuid";
+
+    /** 读取法杖 UUID；缺失时返回空串。 */
+    public static String getStaffUuid(CompoundTag root) {
+        if (root == null || !root.contains(KEY_STAFF_UUID, Tag.TAG_STRING)) {
+            return "";
+        }
+        return root.getString(KEY_STAFF_UUID);
+    }
+
+    /** 确保法杖持有稳定 UUID；缺失时写入并返回新生成的 UUID。 */
+    public static String ensureStaffUuid(CompoundTag root) {
+        if (root == null) {
+            return "";
+        }
+        String existing = getStaffUuid(root);
+        if (!existing.isEmpty()) {
+            return existing;
+        }
+        String created = UUID.randomUUID().toString();
+        root.putString(KEY_STAFF_UUID, created);
+        return created;
+    }
 
     /**
      * 页内容的逐元素标签。
@@ -462,6 +486,17 @@ public final class StaffPages {
 
     private static CompoundTag rootOf(ItemStack stack) {
         return stack == null ? null : stack.getTag();
+    }
+
+    public static String getStaffUuid(ItemStack stack) {
+        return getStaffUuid(rootOf(stack));
+    }
+
+    public static String ensureStaffUuid(ItemStack stack) {
+        if (stack == null) {
+            return "";
+        }
+        return ensureStaffUuid(stack.getOrCreateTag());
     }
 
     public static boolean exists(ItemStack stack, int pageIndex) {

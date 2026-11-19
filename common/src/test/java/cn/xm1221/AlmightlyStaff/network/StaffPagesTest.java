@@ -351,4 +351,14 @@ class StaffPagesTest {
         root.putInt("page_idx", 99);
         assertEquals(StaffPages.MAX_PAGES, StaffPages.castPage(root));
     }
+
+    @Test
+    void ensureStaffUuidIsStable() {
+        CompoundTag root = new CompoundTag();
+        assertEquals("", StaffPages.getStaffUuid(root));
+        String first = StaffPages.ensureStaffUuid(root);
+        assertFalse(first.isEmpty());
+        assertEquals(first, StaffPages.getStaffUuid(root));
+        assertEquals(first, StaffPages.ensureStaffUuid(root));
+    }
 }

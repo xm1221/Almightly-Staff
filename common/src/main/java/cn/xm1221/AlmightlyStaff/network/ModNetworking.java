@@ -59,6 +59,11 @@ public class ModNetworking {
         CHANNEL.register(MsgStaffGreatSpellCheckC2S.class, MsgStaffGreatSpellCheckC2S::encode, MsgStaffGreatSpellCheckC2S::decode, MsgStaffGreatSpellCheckC2S::handle);
         CHANNEL.register(MsgStaffGreatSpellCheckS2C.class, MsgStaffGreatSpellCheckS2C::encode, MsgStaffGreatSpellCheckS2C::decode, MsgStaffGreatSpellCheckS2C::handle);
         CHANNEL.register(MsgStaffCastClearStackC2S.class, MsgStaffCastClearStackC2S::encode, MsgStaffCastClearStackC2S::decode, MsgStaffCastClearStackC2S::handle);
+        // ---- IDE 双向 HexParse ----
+        CHANNEL.register(MsgIdeParseToCodeC2S.class, MsgIdeParseToCodeC2S::encode, MsgIdeParseToCodeC2S::decode, MsgIdeParseToCodeC2S::handle);
+        CHANNEL.register(MsgIdeParseToCodeS2C.class, MsgIdeParseToCodeS2C::encode, MsgIdeParseToCodeS2C::decode, MsgIdeParseToCodeS2C::handle);
+        CHANNEL.register(MsgIdeParseToIotasC2S.class, MsgIdeParseToIotasC2S::encode, MsgIdeParseToIotasC2S::decode, MsgIdeParseToIotasC2S::handle);
+        CHANNEL.register(MsgIdeParseToIotasS2C.class, MsgIdeParseToIotasS2C::encode, MsgIdeParseToIotasS2C::decode, MsgIdeParseToIotasS2C::handle);
     }
 
     // ---- 滚轮翻页 ----
@@ -248,6 +253,7 @@ public class ModNetworking {
 
     /** 分块同步：按字节分批，单包 ≤ 20000 字节（1.20.1 custom payload 上限 32767）。 */
     private static void sendSync(ServerPlayer s, ItemStack stack, int focusPage) {
+        String staffUuid = StaffPages.ensureStaffUuid(stack);
         List<PageData> all = buildPages(stack);
         int castPage = StaffPages.castPage(stack);
         final int MAX_BYTES = 20000;
@@ -256,7 +262,7 @@ public class ModNetworking {
         for (PageData p : all) {
             int pb = pageBytes(p);
             if (!batch.isEmpty() && batchBytes + pb > MAX_BYTES) {
-                CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), castPage, focusPage, List.of(), false, false, ""));
+                CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), castPage, focusPage, List.of(), false, false, "", staffUuid));
                 batch.clear();
                 batchBytes = 16;
             }
@@ -264,7 +270,7 @@ public class ModNetworking {
             batchBytes += pb;
         }
         if (!batch.isEmpty() || all.isEmpty()) {
-            CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), castPage, focusPage, List.of(), true, false, ""));
+            CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(new ArrayList<>(batch), castPage, focusPage, List.of(), true, false, "", staffUuid));
         }
     }
 
@@ -277,10 +283,11 @@ public class ModNetworking {
      */
     private static void sendIncremental(ServerPlayer s, ItemStack stack, String status, int focusPage,
                                         List<Integer> removed, int... pageIndexes) {
+        String staffUuid = StaffPages.ensureStaffUuid(stack);
         List<PageData> pages = new ArrayList<>();
         for (int idx : pageIndexes) if (StaffPages.exists(stack, idx)) pages.add(buildPage(stack, idx));
         CHANNEL.sendToPlayer(s, new MsgStaffLibSyncS2C(pages, StaffPages.castPage(stack), focusPage,
-            removed == null ? List.of() : removed, true, true, status == null ? "" : status));
+            removed == null ? List.of() : removed, true, true, status == null ? "" : status, staffUuid));
     }
 
     private static ItemStack staffInMainHand(ServerPlayer s) {
@@ -314,7 +321,7 @@ public class ModNetworking {
      * @param status    拒绝原因语言键，空串 = 成功
      */
     public record MsgStaffLibSyncS2C(List<PageData> pages, int castPage, int focusPage, List<Integer> removed,
-                                     boolean lastChunk, boolean incremental, String status) {
+                                     boolean lastChunk, boolean incremental, String status, String staffUuid) {
         public static void encode(MsgStaffLibSyncS2C m, FriendlyByteBuf b) {
             b.writeInt(m.pages.size());
             for (PageData p : m.pages) {
@@ -330,6 +337,7 @@ public class ModNetworking {
             b.writeBoolean(m.lastChunk);
             b.writeBoolean(m.incremental);
             b.writeUtf(m.status == null ? "" : m.status);
+            b.writeUtf(m.staffUuid == null ? "" : m.staffUuid);
         }
         public static MsgStaffLibSyncS2C decode(FriendlyByteBuf b) {
             int n = b.readInt(); List<PageData> pages = new ArrayList<>();
@@ -347,13 +355,13 @@ public class ModNetworking {
             int removedCount = b.readInt(); List<Integer> removed = new ArrayList<>();
             for (int i = 0; i < removedCount; i++) removed.add(b.readInt());
             return new MsgStaffLibSyncS2C(pages, castPage, focusPage, removed,
-                b.readBoolean(), b.readBoolean(), b.readUtf());
+                b.readBoolean(), b.readBoolean(), b.readUtf(), b.readUtf());
         }
         public static void handle(MsgStaffLibSyncS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             Minecraft.getInstance().execute(() -> {
                 var s = Minecraft.getInstance().screen;
-                if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr)
-                    scr.onSyncChunk(m.pages, m.castPage, m.focusPage, m.removed, m.lastChunk, m.incremental, m.status);
+                if (s instanceof StaffSyncReceiver scr)
+                    scr.onSyncChunk(m.pages, m.castPage, m.focusPage, m.removed, m.lastChunk, m.incremental, m.status, m.staffUuid);
             });
         }
     }
@@ -494,7 +502,7 @@ public class ModNetworking {
         public static void handle(MsgStaffGreatSpellCheckS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
             Minecraft.getInstance().execute(() -> {
                 var s = Minecraft.getInstance().screen;
-                if (s instanceof cn.xm1221.AlmightlyStaff.gui.StaffLibScreen scr) scr.onGreatSpellCheck(m.actionId, m.usable, m.signature, m.startDir);
+                if (s instanceof StaffSyncReceiver scr) scr.onGreatSpellCheck(m.actionId, m.usable, m.signature, m.startDir);
             });
         }
     }
@@ -509,6 +517,99 @@ public class ModNetworking {
                     // setStaffcastImage(null) → CCStaffcastImage 置空 tag → 下次 getStaffcastVM 返回全新空 image
                     at.petrak.hexcasting.xplat.IXplatAbstractions.INSTANCE.setStaffcastImage(s, null);
                 } catch (Exception ignored) { }
+            });
+        }
+    }
+
+    // ==================== IDE 双向 HexParse 消息（带 requestId + 原始 NBT 传输） ====================
+    public record MsgIdeParseToCodeC2S(int requestId, int pageIndex, CompoundTag listNbt) {
+        public static void encode(MsgIdeParseToCodeC2S m, FriendlyByteBuf b) {
+            b.writeInt(m.requestId); b.writeInt(m.pageIndex);
+            b.writeBoolean(m.listNbt != null);
+            if (m.listNbt != null) b.writeNbt(m.listNbt);
+        }
+        public static MsgIdeParseToCodeC2S decode(FriendlyByteBuf b) {
+            int req = b.readInt(), page = b.readInt();
+            CompoundTag nbt = b.readBoolean() ? b.readNbt() : null;
+            return new MsgIdeParseToCodeC2S(req, page, nbt);
+        }
+        public static void handle(MsgIdeParseToCodeC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                if (!Platform.isModLoaded("hexparse")) {
+                    CHANNEL.sendToPlayer(s, new MsgIdeParseToCodeS2C(m.requestId, m.pageIndex, "", "hexparse_missing"));
+                    return;
+                }
+                try {
+                    String code = HexParseBridge.parseIotaNbt(m.listNbt, s);
+                    CHANNEL.sendToPlayer(s, new MsgIdeParseToCodeS2C(m.requestId, m.pageIndex, code == null ? "" : code, ""));
+                } catch (Throwable e) {
+                    CHANNEL.sendToPlayer(s, new MsgIdeParseToCodeS2C(m.requestId, m.pageIndex, "", e.getMessage() == null ? "parse_error" : e.getMessage()));
+                }
+            });
+        }
+    }
+
+    public record MsgIdeParseToCodeS2C(int requestId, int pageIndex, String code, String error) {
+        public static void encode(MsgIdeParseToCodeS2C m, FriendlyByteBuf b) {
+            b.writeInt(m.requestId); b.writeInt(m.pageIndex);
+            b.writeUtf(m.code == null ? "" : m.code); b.writeUtf(m.error == null ? "" : m.error);
+        }
+        public static MsgIdeParseToCodeS2C decode(FriendlyByteBuf b) {
+            return new MsgIdeParseToCodeS2C(b.readInt(), b.readInt(), b.readUtf(), b.readUtf());
+        }
+        public static void handle(MsgIdeParseToCodeS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            Minecraft.getInstance().execute(() -> {
+                var s = Minecraft.getInstance().screen;
+                if (s instanceof StaffSyncReceiver scr) scr.onIdeParseToCode(m.requestId, m.pageIndex, m.code, m.error);
+            });
+        }
+    }
+
+    public record MsgIdeParseToIotasC2S(int requestId, int pageIndex, String code) {
+        public static void encode(MsgIdeParseToIotasC2S m, FriendlyByteBuf b) {
+            b.writeInt(m.requestId); b.writeInt(m.pageIndex); b.writeUtf(m.code == null ? "" : m.code);
+        }
+        public static MsgIdeParseToIotasC2S decode(FriendlyByteBuf b) {
+            return new MsgIdeParseToIotasC2S(b.readInt(), b.readInt(), b.readUtf());
+        }
+        public static void handle(MsgIdeParseToIotasC2S m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            var s = ctx.get().getPlayer() instanceof ServerPlayer sp ? sp : null; if (s == null) return;
+            ctx.get().queue(() -> {
+                if (!Platform.isModLoaded("hexparse")) {
+                    CHANNEL.sendToPlayer(s, new MsgIdeParseToIotasS2C(m.requestId, m.pageIndex, false, List.of(), "hexparse_missing", -1));
+                    return;
+                }
+                var res = HexParseBridge.parseCodeToRawTags(m.code, s);
+                CHANNEL.sendToPlayer(s, new MsgIdeParseToIotasS2C(m.requestId, m.pageIndex, res.ok(), res.tags(), res.error(), res.errorLine()));
+            });
+        }
+    }
+
+    public record MsgIdeParseToIotasS2C(int requestId, int pageIndex, boolean ok, List<CompoundTag> iotaTags, String error, int errorLine) {
+        public static void encode(MsgIdeParseToIotasS2C m, FriendlyByteBuf b) {
+            b.writeInt(m.requestId); b.writeInt(m.pageIndex); b.writeBoolean(m.ok);
+            List<CompoundTag> tags = m.iotaTags == null ? List.of() : m.iotaTags;
+            b.writeInt(tags.size());
+            for (CompoundTag t : tags) if (t != null) b.writeNbt(t);
+            b.writeUtf(m.error == null ? "" : m.error);
+            b.writeInt(m.errorLine);
+        }
+        public static MsgIdeParseToIotasS2C decode(FriendlyByteBuf b) {
+            int req = b.readInt(), page = b.readInt();
+            boolean ok = b.readBoolean();
+            int n = b.readInt();
+            List<CompoundTag> tags = new ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                CompoundTag t = b.readNbt();
+                if (t != null) tags.add(t);
+            }
+            return new MsgIdeParseToIotasS2C(req, page, ok, tags, b.readUtf(), b.readInt());
+        }
+        public static void handle(MsgIdeParseToIotasS2C m, Supplier<dev.architectury.networking.NetworkManager.PacketContext> ctx) {
+            Minecraft.getInstance().execute(() -> {
+                var s = Minecraft.getInstance().screen;
+                if (s instanceof StaffSyncReceiver scr) scr.onIdeParseToIotas(m.requestId, m.pageIndex, m.ok, m.iotaTags, m.error, m.errorLine);
             });
         }
     }

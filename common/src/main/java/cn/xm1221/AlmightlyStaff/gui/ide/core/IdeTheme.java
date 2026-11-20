@@ -115,6 +115,40 @@ public final class IdeTheme {
         return cachedHasTex;
     }
 
+
+    /**
+     * 用 9 个普通 blit 拼出九宫格（替代 1.21.1 已移除的 GuiGraphics#blitNineSliced）。
+     * 源图块 style.uw x style.vh 的四周各切 style.slice 像素作为边框/角。
+     */
+    private static void blitNineSlice(GuiGraphics g, int x, int y, int w, int h, NineSlice style) {
+        final int s = style.slice;
+        final int uw = style.uw;
+        final int vh = style.vh;
+        final int u = style.u;
+        final int v = style.v;
+        final int sw = uw - s * 2;
+        final int sh = vh - s * 2;
+        final int dw = w - s * 2;
+        final int dh = h - s * 2;
+        if (dw < 0 || dh < 0 || sw <= 0 || sh <= 0) {
+            // 太小：直接拉伸整块，避免负尺寸
+            g.blit(WIDGETS_TEX, x, y, w, h, u, v, uw, vh, 256, 256);
+            return;
+        }
+        // 四角
+        g.blit(WIDGETS_TEX, x, y, s, s, u, v, s, s, 256, 256);
+        g.blit(WIDGETS_TEX, x + w - s, y, s, s, u + uw - s, v, s, s, 256, 256);
+        g.blit(WIDGETS_TEX, x, y + h - s, s, s, u, v + vh - s, s, s, 256, 256);
+        g.blit(WIDGETS_TEX, x + w - s, y + h - s, s, s, u + uw - s, v + vh - s, s, s, 256, 256);
+        // 四边
+        g.blit(WIDGETS_TEX, x + s, y, dw, s, u + s, v, sw, s, 256, 256);
+        g.blit(WIDGETS_TEX, x + s, y + h - s, dw, s, u + s, v + vh - s, sw, s, 256, 256);
+        g.blit(WIDGETS_TEX, x, y + s, s, dh, u, v + s, s, sh, 256, 256);
+        g.blit(WIDGETS_TEX, x + w - s, y + s, s, dh, u + uw - s, v + s, s, sh, 256, 256);
+        // 中心
+        g.blit(WIDGETS_TEX, x + s, y + s, dw, dh, u + s, v + s, sw, sh, 256, 256);
+    }
+
     public static void drawNineSlice(GuiGraphics g, Bounds b, NineSlice style) {
         if (b == null || b.isEmpty()) return;
         drawNineSlice(g, b.x(), b.y(), b.w(), b.h(), style);
@@ -126,7 +160,10 @@ public final class IdeTheme {
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
-            g.blitNineSliced(WIDGETS_TEX, x, y, w, h, style.slice, style.uw, style.vh, style.u, style.v);
+            // 1.21.1 移除了 GuiGraphics.blitNineSliced(ResourceLocation,...)（只剩需要
+            // GuiSpriteScaling.NineSlice 的 blitNineSlicedSprite，且图集必须是 sprite），
+            // 这里用普通 blit 手工拼九宫格，行为与原来一致。
+            blitNineSlice(g, x, y, w, h, style);
             return;
         }
         int fill = switch (style) {

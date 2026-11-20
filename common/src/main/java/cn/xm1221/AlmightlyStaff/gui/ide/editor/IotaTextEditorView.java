@@ -222,11 +222,11 @@ public final class IotaTextEditorView implements IdeComponent {
             return;
         }
         List<CompoundTag> tags = doc.iotasView();
-        boolean alwaysShowCommas = false;
-        try {
-            alwaysShowCommas = HexConfig.client() != null && HexConfig.client().alwaysShowListCommas();
-        } catch (Throwable ignored) {
-        }
+        // Hex 0.12 的 ClientConfigAccess 已移除 alwaysShowListCommas()（实测该接口只剩
+        // ctrlTogglesOffStrokeOrder / disableInworldScrolling / invertSpellbookScrollDirection /
+        // invertAbacusScrollDirection / gridSnapThreshold / clickingTogglesDrawing /
+        // advancedTooltipsShowsIotaNBT / staticActiveSlates），列表逗号现在始终显示。
+        boolean alwaysShowCommas = true;
         for (int i = 0; i < tags.size(); i++) {
             CompoundTag tag = tags.get(i);
             boolean hasComma = false;

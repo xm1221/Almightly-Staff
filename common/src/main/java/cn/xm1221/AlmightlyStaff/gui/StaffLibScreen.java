@@ -1317,7 +1317,7 @@ public class StaffLibScreen extends Screen implements StaffSyncReceiver {
         if (editingPage <= 0 || nameField == null) return;
         this.setFocused(nameField);
         nameField.setFocused(true);
-        nameField.moveCursorToEnd();
+        nameField.moveCursorToEnd(false);
         nameField.setHighlightPos(0);
     }
 

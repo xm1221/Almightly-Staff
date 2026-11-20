@@ -76,6 +76,9 @@ subprojects {
         // fails with "Failed to remap N mods".
         if (project.name == 'common') {
             modImplementation("at.petra-k.hexcasting:hexcasting-common-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
+            // HexParse has no -common artifact; common code imports its API, so use the
+            // fabric build here (intermediary naming, which Loom remaps for :common).
+            modImplementation("io.yukkuric.hexparse:hexparse-fabric-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }
         } else {
             modImplementation("at.petra-k.hexcasting:hexcasting-${nameForRef}-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
             modImplementation("io.yukkuric.hexparse:hexparse-${nameForRef}-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }

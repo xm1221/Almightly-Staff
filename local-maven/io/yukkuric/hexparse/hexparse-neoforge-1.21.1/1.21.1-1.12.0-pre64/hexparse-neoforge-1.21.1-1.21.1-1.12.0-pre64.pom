@@ -3,6 +3,6 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.yukkuric.hexparse</groupId>
   <artifactId>hexparse-neoforge-1.21.1</artifactId>
-  <version>1.21.1-1.12.1-pre67</version>
+  <version>1.21.1-1.12.0-pre64</version>
   <packaging>jar</packaging>
 </project>

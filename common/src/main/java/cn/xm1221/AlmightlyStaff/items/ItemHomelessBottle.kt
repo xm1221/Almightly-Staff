@@ -6,7 +6,6 @@ import at.petrak.hexcasting.api.casting.iota.Vec3Iota
 import at.petrak.hexcasting.api.item.IotaHolderItem
 import at.petrak.hexcasting.api.misc.MediaConstants
 import at.petrak.hexcasting.api.pigment.FrozenPigment
-import at.petrak.hexcasting.api.utils.NBTHelper
 import at.petrak.hexcasting.client.ClientTickCounter
 import at.petrak.hexcasting.common.items.magic.ItemMediaHolder
 import at.petrak.hexcasting.common.lib.HexDataComponents
@@ -30,8 +29,8 @@ import kotlin.math.min
  * 与 1.20.1 的差异（0.12 把 iota 与媒质都搬到了 DataComponents）：
  * - `IotaHolderItem` 不再有 `readIotaTag`；读写统一走 [HexDataComponents.IOTA_HOLDER_IOTA]。
  * - `MediaHolderItem` 不再有 `setMaxMedia`；容量用 [HexDataComponents.MEDIA_MAX] 表达。
- * - `NBTHelper` 是 Kotlin 顶层函数（`@file:JvmName("NBTHelper")`），没有 `INSTANCE`，
- *   从 Kotlin 调用要 `import` 扩展函数，从 Java 调用才是静态方法。
+ * - `NBTHelper` 是 Kotlin 顶层函数的 facade（`@file:JvmName("NBTHelper")`），从 Kotlin
+ *   无法 `import` 这个合成类名，所以这里直接用 `CompoundTag` 自带的 API。
  */
 class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties), IotaHolderItem {
     companion object {
@@ -54,8 +53,9 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
     override fun canRecharge(stack: ItemStack): Boolean = false
 
     override fun getBarColor(pStack: ItemStack): Int {
-        val tag = NBTHelper.getCompound(customTag(pStack), COLOR)
-        if (tag == null || tag.isEmpty) return super.getBarColor(pStack)
+        // CompoundTag.getCompound 缺键时返回空标签，不用判 contains
+        val tag = customTag(pStack).getCompound(COLOR)
+        if (tag.isEmpty) return super.getBarColor(pStack)
         val pigment = FrozenPigment.CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(null)
             ?: return super.getBarColor(pStack)
         // 固定位置 + 连续时间：颜色只随玩家颜色器平滑变化，不闪烁
@@ -82,7 +82,9 @@ class ItemHomelessBottle(pProperties: Properties) : ItemMediaHolder(pProperties)
         if (stack.isEmpty) return null
         stack.get(HexDataComponents.IOTA_HOLDER_IOTA.get())?.let { return it }
         // 兼容旧存档：回落到自定义 NBT 里的 home
-        return NBTHelper.getCompound(customTag(stack), HOME)?.let { StaffHex.deserializeIota(it) }
+        val tag = customTag(stack).getCompound(HOME)
+        if (tag.isEmpty) return null
+        return StaffHex.deserializeIota(tag)
     }
 
     override fun writeable(stack: ItemStack): Boolean = true

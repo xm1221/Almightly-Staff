@@ -74,14 +74,26 @@ subprojects {
         // everything from common, so the platform projects depend on those alone;
         // feeding the intermediary common jar into the NeoForge srg -> official remap
         // fails with "Failed to remap N mods".
-        if (project.name == 'common') {
-            modImplementation("at.petra-k.hexcasting:hexcasting-common-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
-            // HexParse has no -common artifact; common code imports its API, so use the
-            // fabric build here (intermediary naming, which Loom remaps for :common).
-            modImplementation("io.yukkuric.hexparse:hexparse-fabric-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }
+        if (project.name == 'neoforge') {
+            // NeoForge production jars are already published in Mojang official naming,
+            // which is exactly what this project compiles against, so Loom must not try
+            // to remap them ("Failed to remap N mods"). Plain file deps keep them on the
+            // compile classpath (and out of the shadow jar).
+            compileOnly files(
+                rootProject.file("local-maven/at/petra-k/hexcasting/hexcasting-neoforge-${project.minecraft_version}/${rootProject.hexcastingVersion}/hexcasting-neoforge-${project.minecraft_version}-${rootProject.hexcastingVersion}.jar"),
+                rootProject.file("local-maven/io/yukkuric/hexparse/hexparse-neoforge-${project.minecraft_version}/${rootProject.hexparseVersion}/hexparse-neoforge-${project.minecraft_version}-${rootProject.hexparseVersion}.jar")
+            )
         } else {
-            modImplementation("at.petra-k.hexcasting:hexcasting-${nameForRef}-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
-            modImplementation("io.yukkuric.hexparse:hexparse-${nameForRef}-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }
+            // :common and :fabric consume the intermediary-named builds, which Loom
+            // remaps to named for us. HexParse has no -common artifact, so :common uses
+            // the fabric one.
+            if (project.name == 'common') {
+                modImplementation("at.petra-k.hexcasting:hexcasting-common-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
+                modImplementation("io.yukkuric.hexparse:hexparse-fabric-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }
+            } else {
+                modImplementation("at.petra-k.hexcasting:hexcasting-fabric-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
+                modImplementation("io.yukkuric.hexparse:hexparse-fabric-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }
+            }
         }
 
     }

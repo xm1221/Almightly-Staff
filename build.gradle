@@ -67,8 +67,16 @@ subprojects {
         compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:0.5.0"))
         // implementation "io.github.llamalad7:mixinextras-forge:0.5.0"  // NeoForge includes this
 
-        modImplementation("at.petra-k.hexcasting:hexcasting-common-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
-        if (project.name != 'common') {
+        // Hex Casting / HexParse, vendored in local-maven/ (see the repositories block).
+        // The *-common artifact is published in intermediary naming and is only usable by
+        // the :common project, which Loom remaps intermediary -> named. The per-loader
+        // artifacts are already in official naming and contain the whole mod, including
+        // everything from common, so the platform projects depend on those alone;
+        // feeding the intermediary common jar into the NeoForge srg -> official remap
+        // fails with "Failed to remap N mods".
+        if (project.name == 'common') {
+            modImplementation("at.petra-k.hexcasting:hexcasting-common-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
+        } else {
             modImplementation("at.petra-k.hexcasting:hexcasting-${nameForRef}-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
             modImplementation("io.yukkuric.hexparse:hexparse-${nameForRef}-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }
         }

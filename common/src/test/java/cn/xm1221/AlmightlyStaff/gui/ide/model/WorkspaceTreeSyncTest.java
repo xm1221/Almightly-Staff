@@ -7,8 +7,15 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeAll;
 
 class WorkspaceTreeSyncTest {
+
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        cn.xm1221.AlmightlyStaff.MinecraftBootstrap.ensure();
+    }
+
 
     @Test
     void folderSanitizeDropsDeletedPagesAndPreservesPagesOnFolderRemove() {

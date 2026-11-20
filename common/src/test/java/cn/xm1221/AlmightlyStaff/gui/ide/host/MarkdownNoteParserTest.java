@@ -6,8 +6,15 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import org.junit.jupiter.api.BeforeAll;
 
 class MarkdownNoteParserTest {
+
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        cn.xm1221.AlmightlyStaff.MinecraftBootstrap.ensure();
+    }
+
 
     @Test
     void parsesHeadingsListsCodeBlocksAndPatternChips() {

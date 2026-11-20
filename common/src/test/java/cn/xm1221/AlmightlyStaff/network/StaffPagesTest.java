@@ -10,6 +10,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeAll;
 
 /**
  * 页存储（{@link StaffPages}）的纯 NBT 层单测。
@@ -18,6 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 容易出数据丢失的地方都在这里钉住（见 staff_gui_fix_plan.md §4.6）。
  */
 class StaffPagesTest {
+
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        cn.xm1221.AlmightlyStaff.MinecraftBootstrap.ensure();
+    }
+
 
     /** 空 ListIota 标签（真实运行时由 {@code IotaType.serialize(new ListIota(List.of()))} 生成）。 */
     private static CompoundTag template() {

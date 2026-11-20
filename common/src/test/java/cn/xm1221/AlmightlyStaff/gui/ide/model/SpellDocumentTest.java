@@ -9,8 +9,15 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeAll;
 
 class SpellDocumentTest {
+
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        cn.xm1221.AlmightlyStaff.MinecraftBootstrap.ensure();
+    }
+
 
     private static CompoundTag tag(String id) {
         CompoundTag t = new CompoundTag();

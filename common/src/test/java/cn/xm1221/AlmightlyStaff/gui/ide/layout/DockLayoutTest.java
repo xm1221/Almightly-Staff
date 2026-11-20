@@ -8,8 +8,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeAll;
 
 class DockLayoutTest {
+
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        cn.xm1221.AlmightlyStaff.MinecraftBootstrap.ensure();
+    }
+
 
     @Test
     void splitClampsMinPixelsAndRelayoutsOnDrag() {

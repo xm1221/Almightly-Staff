@@ -1,6 +1,8 @@
 package cn.xm1221.AlmightlyStaff.fabric.client;
 
+import at.petrak.hexcasting.api.item.MediaHolderItem;
 import at.petrak.hexcasting.api.item.VariantItem;
+import at.petrak.hexcasting.common.items.magic.ItemMediaBattery;
 import at.petrak.hexcasting.xplat.IClientXplatAbstractions;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.client.AlmightlyStaffKeybinds;
@@ -20,6 +22,14 @@ public final class AlmightlyStaffModFabricClient implements ClientModInitializer
             (stack, level, holder, holderID) -> {
                 if (stack.getItem() instanceof VariantItem vi) return vi.getVariant(stack);
                 return 0;
+            });
+
+        // 游子之瓶媒质充盈度模型属性
+        IClientXplatAbstractions.INSTANCE.registerItemProperty(
+            AlmightlyStaffMod.HOME_BOTTLE, ItemMediaBattery.MEDIA_PREDICATE,
+            (stack, level, holder, holderID) -> {
+                if (stack.getItem() instanceof MediaHolderItem m) return m.getMediaFullness(stack);
+                return 0f;
             });
 
         // HexParse/Hex 1.21 已去掉 fabric.event.MouseScrollCallback，改用 Architectury 原始滚轮事件

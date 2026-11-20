@@ -1,8 +1,9 @@
 package cn.xm1221.AlmightlyStaff.neoforge;
 
+import at.petrak.hexcasting.common.lib.HexCreativeTabs;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.AlmightlyStaffItems;
-import at.petrak.hexcasting.common.lib.HexCreativeTabs;
+import cn.xm1221.AlmightlyStaff.recipe.AlmightlyStaffRecipes;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
@@ -23,8 +24,9 @@ public final class AlmightlyStaffModNeoForge {
     public AlmightlyStaffModNeoForge(ModContainer modContainer) {
         MOD_BUS = modContainer.getEventBus();
 
-        // Item registration (HexMod bind pattern)
+        // Item & RecipeSerializer registration (HexMod bind pattern)
         bind(Registries.ITEM, AlmightlyStaffMod::registerItems);
+        bind(Registries.RECIPE_SERIALIZER, AlmightlyStaffRecipes::register);
 
         // Client-side init (only on physical client)
         if (FMLLoader.getDist().isClient()) {
@@ -35,6 +37,7 @@ public final class AlmightlyStaffModNeoForge {
         MOD_BUS.addListener(BuildCreativeModeTabContentsEvent.class, event -> {
             if (event.getTabKey().equals(HexCreativeTabs.HEX_KEY)) {
                 event.accept(AlmightlyStaffItems.getStaff());
+                event.accept(AlmightlyStaffItems.getHomelessBottle());
             }
         });
 

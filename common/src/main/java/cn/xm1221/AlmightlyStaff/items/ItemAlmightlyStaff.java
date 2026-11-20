@@ -114,7 +114,7 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         }
 
         List<Iota> instrs = getHex(stack, (ServerLevel) world);
-        if (instrs == null) {
+        if (instrs == null || instrs.isEmpty()) {
             return;
         }
         var sPlayer = (ServerPlayer) player;
@@ -291,10 +291,15 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
 
     @Override
     public void inventoryTick(ItemStack itemStack, Level level, Entity entity, int i, boolean bl) {
+        super.inventoryTick(itemStack, level, entity, i, bl);
+        if (level.isClientSide) return;
+        var config = cn.xm1221.AlmightlyStaff.AlmightlyStaffConfig.get();
+        if (!config.mediaRegenEnabled) return;
         if (entity instanceof Allay || entity instanceof ServerPlayer) {
             var media = getMedia(itemStack);
-            if (media < getMaxMedia(itemStack) && level.getGameTime() % 13 == 0) {
-                addMedia(itemStack, media + MediaConstants.DUST_UNIT);
+            int interval = config.mediaRegenIntervalTicks;
+            if (media < getMaxMedia(itemStack) && level.getGameTime() % interval == 0) {
+                addMedia(itemStack, media + (long) config.mediaRegenAmountDust * MediaConstants.DUST_UNIT);
             }
         }
     }
@@ -320,7 +325,15 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
     @Override
     public int getBarColor(ItemStack itemStack) {
         CompoundTag tag = getCustomDataTag(itemStack);
-        if (tag.contains(BAR_COLOR)) {
+        if (tag.contains(BAR_COLOR, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            CompoundTag pigmentTag = NBTHelper.getCompound(tag, BAR_COLOR);
+            if (pigmentTag != null) {
+                FrozenPigment fp = FrozenPigment.CODEC.parse(net.minecraft.nbt.NbtOps.INSTANCE, pigmentTag).result().orElse(null);
+                if (fp != null) {
+                    return fp.getColorProvider().getColor(at.petrak.hexcasting.client.ClientTickCounter.getTotal(), Vec3.ZERO);
+                }
+            }
+        } else if (tag.contains(BAR_COLOR)) {
             return NBTHelper.getInt(tag, BAR_COLOR);
         }
         return 0xb38ef3;
@@ -344,10 +357,20 @@ public class ItemAlmightlyStaff extends ItemSpellbook implements HexHolderItem, 
         if (level.isClientSide) {
             return;
         }
-        var color = new StaffCastEnv((ServerPlayer) player, InteractionHand.MAIN_HAND)
-                .getPigment().getColorProvider().getColor(level.getGameTime(), player.position());
-        setBarColor(itemStack, color);
-        setMedia(itemStack, 64 * MediaConstants.CRYSTAL_UNIT);
+        CompoundTag tag = getCustomDataTag(itemStack);
+        // 只有全新合成的法杖才初始化。封印配方（SealStaffRecipe）产出的法杖会沿用原料的数据，
+        // 这里重置会把已存的媒质和条颜色清掉。
+        if (NBTHelper.hasLong(tag, "max_media")) {
+            return;
+        }
+        var pigment = at.petrak.hexcasting.api.HexAPI.instance().getColorizer(player);
+        var encoded = FrozenPigment.CODEC.encodeStart(net.minecraft.nbt.NbtOps.INSTANCE, pigment).result().orElse(null);
+        if (encoded instanceof CompoundTag pigmentTag) {
+            tag.put(BAR_COLOR, pigmentTag);
+        }
+        NBTHelper.putLong(tag, "media", 0);
+        NBTHelper.putLong(tag, "max_media", 64 * MediaConstants.CRYSTAL_UNIT);
+        setCustomDataTag(itemStack, tag);
     }
 
     @Override

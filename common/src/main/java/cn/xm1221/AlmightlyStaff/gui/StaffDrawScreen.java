@@ -28,6 +28,7 @@ public class StaffDrawScreen extends Screen {
     private final List<ResolvedPattern> patterns = new ArrayList<>();
     private GuiSpellcasting spellcasting;
     private boolean done;
+    private boolean mouseHeld;
 
     public StaffDrawScreen(Screen parent, Consumer<PatternRef> callback) {
         super(Component.translatable("almightly_staff.gui.draw_pattern"));
@@ -61,6 +62,7 @@ public class StaffDrawScreen extends Screen {
         g.fillGradient(0, 0, width, height, 0xC0101010, 0xC0000000);
         spellcasting.render(g, mx, my, pt);
         super.render(g, mx, my, pt);
+        driveDrag();
     }
 
     @Override
@@ -71,20 +73,38 @@ public class StaffDrawScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (button == 0) mouseHeld = true;
         if (spellcasting.mouseClicked(mx, my, button)) return true;
         return super.mouseClicked(mx, my, button);
     }
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
+        if (button == 0) mouseHeld = false;
         if (spellcasting.mouseReleased(mx, my, button)) return true;
         return super.mouseReleased(mx, my, button);
     }
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (button == 0) mouseHeld = true;
         if (spellcasting.mouseDragged(mx, my, button, dx, dy)) return true;
         return super.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    @Override
+    public void mouseMoved(double mx, double my) {
+        if (spellcasting != null) spellcasting.mouseMoved(mx, my);
+        super.mouseMoved(mx, my);
+    }
+
+    /** 按住左键期间每帧用实时鼠标坐标驱动内嵌网格的 mouseDragged（兜底 NeoForge/Forge 包装屏拖拽事件漏发）。 */
+    private void driveDrag() {
+        if (!mouseHeld || spellcasting == null || minecraft == null) return;
+        var win = minecraft.getWindow();
+        double x = minecraft.mouseHandler.xpos() * (double) win.getGuiScaledWidth() / (double) win.getScreenWidth();
+        double y = minecraft.mouseHandler.ypos() * (double) win.getGuiScaledHeight() / (double) win.getScreenHeight();
+        spellcasting.mouseDragged(x, y, 0, 0, 0);
     }
 
     @Override

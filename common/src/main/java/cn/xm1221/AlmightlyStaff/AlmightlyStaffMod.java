@@ -1,8 +1,10 @@
 package cn.xm1221.AlmightlyStaff;
 
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
+import cn.xm1221.AlmightlyStaff.items.ItemHomelessBottle;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
 import cn.xm1221.AlmightlyStaff.parse.AlmightlyStaffParse;
+import dev.architectury.platform.Platform;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
@@ -21,6 +23,10 @@ public final class AlmightlyStaffMod {
             ALL_IN_ONE = make("all_in_one",
                 new ItemAlmightlyStaff(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1)));
         }
+        if (HOME_BOTTLE == null) {
+            HOME_BOTTLE = make("homeless_bottle",
+                new ItemHomelessBottle(new Item.Properties().rarity(Rarity.UNCOMMON).stacksTo(1)));
+        }
         for (var e : ITEMS.entrySet()) {
             r.accept(e.getValue(), e.getKey());
         }
@@ -29,11 +35,15 @@ public final class AlmightlyStaffMod {
     private static final Map<ResourceLocation, Item> ITEMS = new LinkedHashMap<>();
 
     public static Item ALL_IN_ONE;
+    public static Item HOME_BOTTLE;
 
     public static void init() {
+        AlmightlyStaffConfig.load();
         AlmightlyStaffActions.init();
         ModNetworking.init();
-        AlmightlyStaffParse.initParse();
+        if (Platform.isModLoaded("hexparse")) {
+            AlmightlyStaffParse.initParse();
+        }
     }
 
     private static <T extends Item> T make(String id, T item) {

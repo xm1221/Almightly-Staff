@@ -3,6 +3,7 @@ package cn.xm1221.AlmightlyStaff.fabric;
 import at.petrak.hexcasting.common.lib.HexCreativeTabs;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.AlmightlyStaffItems;
+import cn.xm1221.AlmightlyStaff.recipe.AlmightlyStaffRecipes;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.minecraft.core.Registry;
@@ -13,9 +14,12 @@ public final class AlmightlyStaffModFabric implements ModInitializer {
     public void onInitialize() {
         AlmightlyStaffMod.init();
         AlmightlyStaffMod.registerItems((item, id) -> Registry.register(BuiltInRegistries.ITEM, id, item));
+        AlmightlyStaffRecipes.register((serializer, id) -> Registry.register(BuiltInRegistries.RECIPE_SERIALIZER, id, serializer));
 
         // Add to Hex Casting creative tab
-        ItemGroupEvents.modifyEntriesEvent(HexCreativeTabs.HEX_KEY).register(entries ->
-            entries.accept(AlmightlyStaffItems.getStaff()));
+        ItemGroupEvents.modifyEntriesEvent(HexCreativeTabs.HEX_KEY).register(entries -> {
+            entries.accept(AlmightlyStaffItems.getStaff());
+            entries.accept(AlmightlyStaffItems.getHomelessBottle());
+        });
     }
 }

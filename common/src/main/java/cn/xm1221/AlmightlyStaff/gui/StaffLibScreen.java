@@ -3,137 +3,299 @@ package cn.xm1221.AlmightlyStaff.gui;
 import at.petrak.hexcasting.api.casting.iota.Iota;
 import at.petrak.hexcasting.api.casting.iota.IotaType;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
-import cn.xm1221.AlmightlyStaff.network.ModNetworking;
-import cn.xm1221.AlmightlyStaff.spell.PatternCatalogEntry;
-import cn.xm1221.AlmightlyStaff.spell.PatternRef;
-import cn.xm1221.AlmightlyStaff.spell.StaffHex;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.locale.Language;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
+import cn.xm1221.AlmightlyStaff.AlmightlyStaffConfig;
+import cn.xm1221.AlmightlyStaff.gui.ide.StaffIdeScreen;
+import cn.xm1221.AlmightlyStaff.network.ModNetworking;
+import cn.xm1221.AlmightlyStaff.network.StaffSyncReceiver;
+import cn.xm1221.AlmightlyStaff.spell.PatternCatalogEntry;
+import cn.xm1221.AlmightlyStaff.spell.PatternRef;
+import cn.xm1221.AlmightlyStaff.spell.StaffHex;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * 万法之杖法术库主界面（三栏布局，移植自 Hex CyberStaff 的 SpellLibraryScreen）。
- * 左：页列表（法术）；中：图案目录（搜索）；右：当前法术序列编辑。
- * 点击空格子/已填充格子 → 弹出浮动绘制 GUI；保留复制/粘贴/拖拽/撤销；
- * Parse 按钮进入文本模式（服务端 HexParse 转换）。
+ * 左：页列表；中：图案目录；右：当前页的序列编辑。
  *
- * 特别感谢 Aurover —— Hex CyberStaff 的作者。本界面的三栏布局、配色、
+ * <p>页模型见 {@link cn.xm1221.AlmightlyStaff.network.StaffPages}：页号稀疏（删除只留空号），
+ * 页存在 = 服务端 {@code pages} 里有该 key。界面自己记住"正在编辑哪一页"（{@link #editingPage}），
+ * 服务端回包只更新页列表与 ▶ 标记，不反向驱动草稿。
+ *
+ * <p>特别感谢 Aurover —— Hex CyberStaff 的作者。本界面的三栏布局、配色、
  * 图案槽位样式、右键菜单、滚动条等视觉与交互设计均改编自 CyberStaff
  * （https://github.com/Aurover/Hex-CyberStaff），向 ta 致敬。
  */
-public class StaffLibScreen extends Screen {
+public class StaffLibScreen extends Screen implements StaffSyncReceiver {
     private static final int MARGIN = 8;
     private static final int GAP = 6;
     private static final int LIST_TOP = 70;
     private static final int ROW_HEIGHT = 20;
+    private static final int SEQUENCE_SLOT_SIZE = 18;
+    private static final int SEQUENCE_SLOT_GAP = 4;
+    private static final int SEQUENCE_COLUMNS = 10;
     private static final int FOOTER_HEIGHT = 52;
     private static final int SCROLLBAR_WIDTH = 6;
     private static final int MIN_THUMB_HEIGHT = 16;
-    private static final int PATTERN_PREVIEW_SIZE = 78;
-    private static final int SEQUENCE_COLUMNS = 10;
-    private static final int SEQUENCE_SLOT_SIZE = 18;
-    private static final int MAX_UNDO_HISTORY = 64;
+    private static final int SEALED_BANNER_HEIGHT = 14;
     private static final int DRAG_THRESHOLD = 4;
     private static final int MENU_WIDTH = 96;
     private static final int MENU_ITEM_HEIGHT = 16;
+    private static final int MENU_ITEMS = 6;
+    private static final int MAX_UNDO_HISTORY = 64;
+    private static final int NAME_SAVE_DELAY = 20;
+    private static final int DELETE_CONFIRM_TICKS = 60;
+    private static final long DOUBLE_CLICK_MS = 280L;
+    private static final int MAX_NAME_LENGTH = 80;
 
-    private List<ModNetworking.PageData> pages = new ArrayList<>();
-    private int selectedPageIndex = -1;
-    private ModNetworking.PageData draft;   // 当前编辑的页快照
-    private final ArrayDeque<List<CompoundTag>> sequenceUndoHistory = new ArrayDeque<>();
+    private static final int COLOR_ACCENT = 0xFF9C6ADE;
+    private static final int COLOR_SELECTED_FILL = 0xAA493662;
+    private static final int COLOR_SEALED_FILL = 0x33E8A82E;
+    private static final int COLOR_SEALED_BORDER = 0xFFE8A82E;
+    private static final int COLOR_SEALED_TEXT = 0xFFFFD9A0;
+    private static final int COLOR_TEXT = 0xE2E6EA;
 
+    private static final int DRAG_NONE = -1, DRAG_CATALOG = 0, DRAG_SEQUENCE = 1, DRAG_PAGE = 2;
+
+    // ---- 页（服务端同步的状态）----
+    private final List<ModNetworking.PageData> pages = new ArrayList<>();
+    private final List<ModNetworking.PageData> pendingSyncPages = new ArrayList<>();
+    private int castPage = 0;      // V 键施放页（▶），服务端 page_idx
+    private int editingPage = 0;   // 正在编辑的页号，0 = 没有
+    private final List<CompoundTag> draftIotas = new ArrayList<>();
+    private final ArrayDeque<List<CompoundTag>> undoHistory = new ArrayDeque<>();
+    private final ArrayDeque<List<CompoundTag>> redoHistory = new ArrayDeque<>();
+
+    // ---- 图案库 ----
     private List<PatternCatalogEntry> catalog = new ArrayList<>();
     private List<PatternCatalogEntry> filteredCatalog = new ArrayList<>();
     private int selectedCatalogIndex = -1;
+    private final Map<String, PatternRef> learnedPerWorld = new HashMap<>();
+    private long lastCatalogClickTime;
+    private int lastCatalogClickRow = -1;
+
+    // ---- 序列编辑 ----
     private final Set<Integer> selectedSlots = new LinkedHashSet<>();
     private int selectionAnchor = -1;
-    private List<CompoundTag> patternClipboard = new ArrayList<>();
+    private final List<CompoundTag> patternClipboard = new ArrayList<>();
 
-    private static final int DRAG_NONE = -1, DRAG_CATALOG = 0, DRAG_SEQUENCE = 1;
+    // ---- 拖拽 ----
     private int pendingDragType = DRAG_NONE, pendingDragIndex = -1;
     private int activeDragType = DRAG_NONE, activeDragIndex = -1;
     private double dragStartX, dragStartY, dragMouseX, dragMouseY;
 
+    // ---- 控件 ----
     private int leftX, leftWidth, middleX, middleWidth, rightX, rightWidth, listBottom;
     private int spellScroll, catalogScroll, sequenceScroll;
-
     private EditBox nameField;
     private EditBox searchField;
+    private Button deleteButton;
+    private boolean suppressNameResponder;
+    private int nameSaveTimer;
+    private boolean deleteArmed;
+    private int deleteConfirmTimer;
+    private boolean pageListFocused;
 
-    private int dragStartSlot = -1;
-    private boolean dragMoved;
+    // ---- 右键菜单 ----
     private boolean menuOpen;
     private int menuX, menuY;
-    private int menuSlot = -1; // 右键点击的目标格（可等于 iotas.size() 表示末尾空格）
-    private final Map<String, PatternRef> learnedPerWorld = new HashMap<>();
+    private int menuSlot = -1;
+
+    // ---- 杂项 ----
     private String statusText = "";
-    private int statusTimer = 0;
-    private int nameSaveTimer = 0;
-    private String pendingGreatSpellAction = null;
-    private int pendingGreatSpellSlot = -1; // -1=追加, >=0=插入该格
+    private int statusTimer;
+    private String pendingGreatSpellAction;
+    private int pendingGreatSpellSlot = -1;
+    private int pendingGreatSpellPage = 0;
+    private long lastPageClickTime;
+    private int lastPageClickRow = -1;
+    private boolean syncRequested;
+    private boolean focusNameAfterSync;
 
     public StaffLibScreen() {
         super(Component.translatable("almightly_staff.gui.title"));
     }
 
     // ==================== 网络同步 ====================
-    private final List<ModNetworking.PageData> pendingSyncPages = new ArrayList<>();
 
-    /** 分块同步：累积直到最后一块再应用。 */
-    public void onSyncChunk(List<ModNetworking.PageData> chunkPages, int selectedPage, boolean lastChunk) {
+    /** 同步入口。incremental=true 表示操作后的增量回发（只带受影响页），按 pageIndex 合并；否则为全量分块同步。 */
+    @Override
+    public void onSyncChunk(List<ModNetworking.PageData> chunkPages, int castPage, int focusPage,
+                            List<Integer> removed, boolean lastChunk, boolean incremental,
+                            String status, String staffUuid) {
+        if (incremental) {
+            onIncrementalSync(chunkPages, castPage, focusPage, removed, status);
+            return;
+        }
         pendingSyncPages.addAll(chunkPages);
         if (!lastChunk) return;
         List<ModNetworking.PageData> all = new ArrayList<>(pendingSyncPages);
         pendingSyncPages.clear();
-        onSync(all, selectedPage);
+        onFullSync(all, castPage, focusPage);
     }
 
-    public void onSync(List<ModNetworking.PageData> syncedPages, int selectedPage) {
-        this.pages = new ArrayList<>(syncedPages);
-        this.selectedPageIndex = -1;
-        for (int i = 0; i < pages.size(); i++) {
-            if (pages.get(i).pageIndex() == selectedPage) { selectedPageIndex = i; break; }
+    /**
+     * 全量同步（首开 / 拖拽排序后）：整表替换。
+     * focusPage &gt; 0 表示服务端要求切到该页；否则尽量保持正在编辑的页不变。
+     */
+    private void onFullSync(List<ModNetworking.PageData> synced, int castPage, int focusPage) {
+        int keep = focusPage > 0 ? focusPage : (findPage(editingPage) == null ? 0 : editingPage);
+        // 全量同步就是"服务端真值"：先断开草稿与名字框，免得把旧草稿 flush 到已经换了内容的页上（B4 的另一半）
+        editingPage = 0;
+        nameSaveTimer = 0;
+        setNameFieldValue("");
+        draftIotas.clear();
+        pages.clear();
+        pages.addAll(synced);
+        pages.sort(Comparator.comparingInt(ModNetworking.PageData::pageIndex));
+        this.castPage = castPage;
+        if (keep == 0) {
+            // 首次打开：优先落在 V 键施放页上，否则第 1 页（一打开就能直接编辑）
+            keep = findPage(castPage) != null ? castPage : (pages.isEmpty() ? 0 : pages.get(0).pageIndex());
         }
-        if (selectedPageIndex >= 0 && selectedPageIndex < pages.size()) {
-            ModNetworking.PageData sp = pages.get(selectedPageIndex);
-            // 自动保存回包与当前页相同时：保留草稿/选择/撤销栈，仅同步名称（避免打断编辑）
-            if (draft != null && draft.pageIndex() == sp.pageIndex()) {
-                if (nameField != null && !nameField.isFocused()) nameField.setValue(sp.name());
-            } else {
-                setDraft(sp);
+        setEditingPage(keep);
+        afterServerFocus();
+    }
+
+    /**
+     * 增量同步：只把受影响页按 pageIndex 合并进列表，不覆盖正在编辑的草稿（修 B4）。
+     * 被拒的操作会带回该页真实内容 + status，此时才回滚草稿。
+     */
+    private void onIncrementalSync(List<ModNetworking.PageData> updated, int castPage, int focusPage,
+                                   List<Integer> removed, String status) {
+        this.castPage = castPage;
+        if (removed != null) {
+            for (int idx : removed) {
+                ModNetworking.PageData gone = findPage(idx);
+                if (gone != null) pages.remove(gone);
             }
-        } else {
-            setDraft(null);
         }
+        for (ModNetworking.PageData page : updated) {
+            ModNetworking.PageData old = findPage(page.pageIndex());
+            if (old == null) pages.add(page);
+            else pages.set(pages.indexOf(old), page);
+        }
+        pages.sort(Comparator.comparingInt(ModNetworking.PageData::pageIndex));
+
+        if (!status.isEmpty()) {
+            showStatus(Component.translatable("almightly_staff.gui." + status).getString());
+            // 写内容/改名被拒：用服务端真值回滚草稿
+            for (ModNetworking.PageData page : updated) {
+                if (page.pageIndex() == editingPage) {
+                    loadDraft(page);
+                    break;
+                }
+            }
+        }
+
+        if (focusPage > 0 && focusPage != editingPage) {
+            setEditingPage(focusPage);
+            afterServerFocus();
+            return;
+        }
+        if (editingPage > 0 && findPage(editingPage) == null) setEditingPage(0);
+        afterServerFocus();
     }
 
-    private void setDraft(ModNetworking.PageData page) {
-        if (page == null) {
-            draft = new ModNetworking.PageData(0, "", new ArrayList<>());
-        } else {
-            draft = new ModNetworking.PageData(page.pageIndex(), page.name(), new ArrayList<>(page.iotas()));
+    private ModNetworking.PageData findPage(int pageIndex) {
+        if (pageIndex <= 0) return null;
+        for (ModNetworking.PageData page : pages) {
+            if (page.pageIndex() == pageIndex) return page;
         }
-        if (nameField != null) nameField.setValue(draft.name());
-        clearSelection();
-        sequenceUndoHistory.clear();
+        return null;
     }
+
+    private int pageRow(int pageIndex) {
+        for (int i = 0; i < pages.size(); i++) {
+            if (pages.get(i).pageIndex() == pageIndex) return i;
+        }
+        return -1;
+    }
+
+    private boolean isSealed(int pageIndex) {
+        ModNetworking.PageData page = findPage(pageIndex);
+        return page != null && page.sealed();
+    }
+
+    /** 只有"有页 + 未封存"才允许改序列（所有编辑入口的统一守卫）。 */
+    private boolean canEditContent() {
+        return editingPage > 0 && findPage(editingPage) != null && !isSealed(editingPage);
+    }
+
+    /** 切到某一页：刷新草稿、名字框、选择与撤销栈。页号 0 = 清空编辑器。 */
+    private void setEditingPage(int pageIndex) {
+        flushRename();
+        editingPage = 0;
+        draftIotas.clear();
+        clearSelection();
+        undoHistory.clear();
+        redoHistory.clear();
+        menuOpen = false;
+        sequenceScroll = 0;
+
+        ModNetworking.PageData page = findPage(pageIndex);
+        if (page != null) {
+            editingPage = page.pageIndex();
+            loadDraft(page);
+        }
+        setNameFieldValue(page == null ? "" : page.name());
+        if (nameField != null) nameField.setEditable(editingPage > 0);
+        deleteConfirmTimer = 0;
+        deleteArmed = false;
+        updateDeleteButton();
+    }
+
+    private void loadDraft(ModNetworking.PageData page) {
+        draftIotas.clear();
+        for (CompoundTag tag : page.iotas()) if (tag != null) draftIotas.add(tag.copy());
+        editingPage = page.pageIndex();
+        setNameFieldValue(page.name());
+        clearSelection();
+        undoHistory.clear();
+        redoHistory.clear();
+    }
+
+    private void setNameFieldValue(String value) {
+        if (nameField == null) return;
+        suppressNameResponder = true;
+        nameField.setValue(value == null ? "" : value);
+        suppressNameResponder = false;
+    }
+
+    /** 把当前草稿（名字 + 内容）写进本地页缓存，保证切走再切回来看到的是最新内容。 */
+    private void syncLocalPage() {
+        int row = pageRow(editingPage);
+        if (row < 0) return;
+        ModNetworking.PageData old = pages.get(row);
+        pages.set(row, new ModNetworking.PageData(editingPage, nameFieldText(),
+            new ArrayList<>(draftIotas), old.sealed()));
+    }
+
+    private String nameFieldText() {
+        return nameField == null ? "" : nameField.getValue().trim();
+    }
+
+    // ==================== 初始化 ====================
 
     @Override
     protected void init() {
@@ -154,57 +316,89 @@ public class StaffLibScreen extends Screen {
         rightX = middleX + middleWidth + GAP;
         listBottom = height - FOOTER_HEIGHT - 8;
 
+        // 画完图案 / 改窗口大小时重建控件：保留搜索词、滚动位置与目录选中项（修 B14）
+        String keepSearch = searchField == null ? "" : searchField.getValue();
+        int keepSpellScroll = spellScroll, keepCatalogScroll = catalogScroll, keepSequenceScroll = sequenceScroll;
+        int keepCatalogSelection = selectedCatalogIndex;
+
         nameField = new EditBox(font, rightX, 42, rightWidth, 20, Component.translatable("almightly_staff.gui.spell_name"));
-        nameField.setMaxLength(80);
-        nameField.setValue(draft == null ? "" : draft.name());
-        nameField.setResponder(s -> nameSaveTimer = 20); // 停止输入 20 tick 后自动保存名称
+        nameField.setMaxLength(MAX_NAME_LENGTH);
+        ModNetworking.PageData editing = findPage(editingPage);
+        setNameFieldValue(editing == null ? "" : editing.name());
+        nameField.setEditable(editingPage > 0);
+        nameField.setResponder(ignored -> {
+            if (!suppressNameResponder) nameSaveTimer = NAME_SAVE_DELAY;
+        });
         addRenderableWidget(nameField);
 
         searchField = new EditBox(font, middleX, 42, middleWidth, 20, Component.translatable("almightly_staff.gui.search"));
         searchField.setMaxLength(100);
+        suppressNameResponder = true;
+        searchField.setValue(keepSearch);
+        suppressNameResponder = false;
         searchField.setResponder(ignored -> refreshFilter());
         addRenderableWidget(searchField);
 
-        int firstButtonY = height - 48;
-        int secondButtonY = height - 25;
-        int leftGap = 3;
-        int leftFirstWidth = Math.max(1, (leftWidth - leftGap) / 2);
-        int leftSecondX = leftX + leftFirstWidth + leftGap;
-        int leftSecondWidth = Math.max(1, leftX + leftWidth - leftSecondX);
-        addButton("almightly_staff.gui.new", button -> newSpell(), leftX, firstButtonY, leftFirstWidth);
-        addButton("almightly_staff.gui.copy", button -> copySpell(), leftSecondX, firstButtonY, leftSecondWidth);
-        addButton("almightly_staff.gui.delete", button -> deleteSpell(), leftX, secondButtonY, leftFirstWidth);
-        addButton("almightly_staff.gui.up", button -> moveSpell(-1), leftSecondX, secondButtonY, leftSecondWidth);
-
-        int actionGap = 3;
-        int middleFirstWidth = Math.max(1, (middleWidth - actionGap) / 2);
-        int middleSecondX = middleX + middleFirstWidth + actionGap;
-        int middleSecondWidth = Math.max(1, middleX + middleWidth - middleSecondX);
-        addButton("almightly_staff.gui.add_pattern", button -> appendCatalogPattern(), middleX, firstButtonY, middleFirstWidth);
-        addButton("almightly_staff.gui.remove_slot", button -> removeSelectedSlots(), middleSecondX, firstButtonY, middleSecondWidth);
-        addButton("almightly_staff.gui.down", button -> moveSpell(1), middleX, secondButtonY, middleFirstWidth);
-        addButton("almightly_staff.gui.select_page", button -> applyPageSelection(), middleSecondX, secondButtonY, middleSecondWidth);
-
-        addButton("almightly_staff.gui.undo", button -> undoSequenceChange(), rightX, firstButtonY, rightWidth);
-        int rightGap = 3;
-        int rightHalf = Math.max(1, (rightWidth - rightGap) / 2);
-        addButton("almightly_staff.gui.save", button -> saveDraft(), rightX, secondButtonY, rightHalf);
-        addButton("almightly_staff.gui.parse", button -> enterParseMode(), rightX + rightHalf + rightGap, secondButtonY, rightWidth - rightHalf - rightGap);
+        buildButtons();
 
         catalog = StaffHex.loadCatalog();
         applyLearnedToCatalog();
         refreshFilter();
-        if (draft != null && draft.pageIndex() > 0) {
-            nameField.setValue(draft.name());
+        selectedCatalogIndex = keepCatalogSelection;
+        if (selectedCatalogIndex >= filteredCatalog.size()) selectedCatalogIndex = -1;
+
+        spellScroll = keepSpellScroll;
+        catalogScroll = keepCatalogScroll;
+        sequenceScroll = keepSequenceScroll;
+        clampScrolls();
+
+        // 只在第一次打开时请求全量同步：从绘制/Parse/施法子界面回来时也会再走一次 init()，
+        // 那时重复请求会把刚改好的草稿用旧数据覆盖（还会多一次丢内容的竞态）。
+        if (!syncRequested || pages.isEmpty()) {
+            syncRequested = true;
+            ModNetworking.sendToServer(new ModNetworking.MsgStaffLibReadC2S());
         }
-        clampAllScrolls();
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffLibReadC2S());
     }
 
-    private void addButton(String labelKey, Button.OnPress action, int x, int y, int buttonWidth) {
+    /** 按钮按栏归位：左栏管页、中栏管图案库、右栏管序列（修 P2 按钮放错栏）。 */
+    private void buildButtons() {
+        int firstRowY = height - 48;
+        int secondRowY = height - 25;
+        int gap = 3;
+        int halfLeft = Math.max(1, (leftWidth - gap) / 2);
+        int leftSecondX = leftX + halfLeft + gap;
+        int leftSecondWidth = Math.max(1, leftX + leftWidth - leftSecondX);
+        addButton("almightly_staff.gui.new", button -> newPage(), leftX, firstRowY, halfLeft);
+        addButton("almightly_staff.gui.copy", button -> duplicatePage(), leftSecondX, firstRowY, leftSecondWidth);
+        deleteButton = addButton("almightly_staff.gui.delete", button -> requestDelete(), leftX, secondRowY, leftWidth);
+
+        addButton("almightly_staff.gui.add_pattern", button -> addCatalogPattern(), middleX, firstRowY, middleWidth);
+        addButton("almightly_staff.gui.switch_ascode", button -> switchToAsCode(), middleX, secondRowY, middleWidth);
+
+        int halfRight = Math.max(1, (rightWidth - gap) / 2);
+        int rightSecondX = rightX + halfRight + gap;
+        int rightSecondWidth = Math.max(1, rightX + rightWidth - rightSecondX);
+        addButton("almightly_staff.gui.undo", button -> undoSequenceChange(), rightX, firstRowY, halfRight);
+        addButton("almightly_staff.gui.redo", button -> redoSequenceChange(), rightSecondX, firstRowY, rightSecondWidth);
+        addButton("almightly_staff.gui.remove_slot", button -> removeSelectedSlots(), rightX, secondRowY, halfRight);
+        addButton("almightly_staff.gui.parse", button -> enterParseMode(), rightSecondX, secondRowY, rightSecondWidth);
+        updateDeleteButton();
+    }
+
+    private Button addButton(String labelKey, Button.OnPress action, int x, int y, int buttonWidth) {
         Button button = Button.builder(Component.translatable(labelKey), action)
             .bounds(x, y, buttonWidth, 20).build();
         addRenderableWidget(button);
+        return button;
+    }
+
+    private void switchToAsCode() {
+        flushRename();
+        AlmightlyStaffConfig.get().useIdeScreen = true;
+        AlmightlyStaffConfig.save();
+        if (minecraft != null) {
+            minecraft.setScreen(new StaffIdeScreen());
+        }
     }
 
     private void refreshFilter() {
@@ -220,16 +414,16 @@ public class StaffLibScreen extends Screen {
     }
 
     // ==================== RENDER ====================
+
     // 1.21.1 的 renderBackground 会触发全屏模糊后处理（renderBlurredBackground），
     // 且 Screen.render() 也会自动调用它；这里覆写为空并改画渐变，避免双重模糊覆盖 UI。
     @Override
-    public void renderBackground(GuiGraphics g, int mx, int my, float pt) {
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float delta) {
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float delta) {
         g.fillGradient(0, 0, width, height, 0xC0080A0D, 0xC0000000);
-        // top bar (CyberStaff style)
         g.fill(0, 0, width, 34, 0xE813171C);
         g.drawCenteredString(font, title, width / 2, 14, 0xF4F6F8);
         drawPanel(g, leftX, leftWidth, Component.translatable("almightly_staff.gui.saved_spells"));
@@ -240,60 +434,146 @@ public class StaffLibScreen extends Screen {
         drawSequence(g, mouseX, mouseY);
         drawFooter(g);
         super.render(g, mouseX, mouseY, delta);
-        drawDragFeedback(g);
+        drawPageDragFeedback(g);
+        drawSequenceDragFeedback(g);
         if (menuOpen) drawSequenceMenu(g, mouseX, mouseY);
-        drawCatalogTooltip(g, mouseX, mouseY); // 最后画：tooltip 在最上层，不被面板/按钮遮挡
+        drawPageTooltip(g, mouseX, mouseY);
+        drawCatalogTooltip(g, mouseX, mouseY);
+    }
+
+    /** 悬停封存页行：提示"已封存：不能移动、删除、编辑内容，可改名"（计划 §4.2）。 */
+    private void drawPageTooltip(GuiGraphics g, int mouseX, int mouseY) {
+        if (menuOpen || activeDragType != DRAG_NONE || pendingDragType != DRAG_NONE) return;
+        int row = spellRowAt(mouseX, mouseY);
+        if (row < 0 || !pages.get(row).sealed()) return;
+        g.renderTooltip(font, Component.translatable("almightly_staff.gui.sealed_hint"), mouseX, mouseY);
     }
 
     /** panel: heading above input fields (y=24), purple accent (y=36), right separator. */
     private void drawPanel(GuiGraphics g, int x, int panelWidth, Component heading) {
-        g.fill(x, 36, x + panelWidth, 38, 0xFF9C6ADE);
+        g.fill(x, 36, x + panelWidth, 38, COLOR_ACCENT);
         g.drawString(font, trim(heading, panelWidth), x, 24, 0xE9EDF1);
         g.fill(x + panelWidth + 3, 36, x + panelWidth + 4, listBottom, 0x553C444D);
     }
 
     private Component trim(Component text, int maxWidth) {
-        String s = text.getString();
+        return Component.literal(trimText(text.getString(), maxWidth));
+    }
+
+    private String trimText(String text, int maxWidth) {
+        String s = text;
         while (font.width(s) > Math.max(8, maxWidth - 4) && s.length() > 1) {
             s = s.substring(0, s.length() - 1);
         }
-        return Component.literal(s);
+        return s;
     }
 
-    private void drawSpellList(GuiGraphics g, int mx, int my) {
+    // ---- 左栏：页列表 ----
+
+    private int visiblePageRows() {
+        return Math.max(1, (listBottom - LIST_TOP) / ROW_HEIGHT);
+    }
+
+    /** 鼠标所在的内容行（pages 下标），不在列表内返回 -1。 */
+    private int spellRowAt(double mx, double my) {
+        if (mx < leftX || mx >= leftX + leftWidth - SCROLLBAR_WIDTH || my < LIST_TOP || my >= listBottom) return -1;
+        int row = spellScroll + (int) ((my - LIST_TOP) / ROW_HEIGHT);
+        return row >= 0 && row < pages.size() ? row : -1;
+    }
+
+    private void drawSpellList(GuiGraphics g, double mx, double my) {
         int top = LIST_TOP, bottom = listBottom;
         int contentRight = leftX + leftWidth - SCROLLBAR_WIDTH;
-        g.enableScissor(leftX, top, contentRight, bottom);
-        int visible = (bottom - top) / ROW_HEIGHT;
+        int visible = visiblePageRows();
         int maxScroll = Math.max(0, pages.size() - visible);
-        spellScroll = Math.max(0, Math.min(spellScroll, maxScroll));
+        spellScroll = Mth.clamp(spellScroll, 0, maxScroll);
+        g.enableScissor(leftX, top, contentRight, bottom);
         for (int i = 0; i < visible; i++) {
             int idx = i + spellScroll;
             if (idx >= pages.size()) break;
+            ModNetworking.PageData page = pages.get(idx);
             int y = top + i * ROW_HEIGHT;
-            boolean selected = idx == selectedPageIndex;
-            int fill = selected ? 0xAA493662 : (i % 2 == 0 ? 0x331E252C : 0x332A3138);
-            g.fill(leftX, y, contentRight, y + ROW_HEIGHT - 2, fill);
-            if (selected) {
-                g.fill(leftX, y, leftX + 3, y + ROW_HEIGHT - 2, 0xFFD7B5FF);
+            int rowBottom = y + ROW_HEIGHT - 2;
+            boolean editing = page.pageIndex() == editingPage;
+            boolean casting = page.pageIndex() == castPage;
+            int fill = page.sealed() ? COLOR_SEALED_FILL
+                : editing ? COLOR_SELECTED_FILL
+                : (i % 2 == 0 ? 0x331E252C : 0x332A3138);
+            g.fill(leftX, y, contentRight, rowBottom, fill);
+            if (editing) g.fill(leftX, y, leftX + 3, rowBottom, 0xFFD7B5FF);
+            if (page.sealed()) drawFrame(g, leftX, y, contentRight, rowBottom, 2, COLOR_SEALED_BORDER);
+
+            int textX = leftX + 6;
+            if (casting) {
+                g.drawString(font, "▶", textX, y + 5, 0xFF8CE99A);
+                textX += font.width("▶") + 3;
             }
-            String label = pages.get(idx).name().isEmpty()
-                ? Component.translatable("almightly_staff.gui.unnamed").getString()
-                : pages.get(idx).name();
-            g.drawString(font, trim(Component.literal(label), contentRight - leftX - 10),
-                leftX + 6, y + 5, selected ? 0xE9D7FF : 0xE2E6EA);
+            if (page.sealed()) {
+                drawPadlock(g, textX, y + 6, COLOR_SEALED_BORDER);
+                textX += 9;
+            }
+            String label = page.name().isEmpty()
+                ? Component.translatable("almightly_staff.gui.page_label", page.pageIndex()).getString()
+                : "#" + page.pageIndex() + " " + page.name();
+            int color = page.sealed() ? COLOR_SEALED_TEXT : editing ? 0xE9D7FF : COLOR_TEXT;
+            g.drawString(font, trimText(label, contentRight - textX - 2), textX, y + 5, color);
         }
         g.disableScissor();
-        drawScrollbar(g, leftX, leftWidth, pages.size(), spellScroll);
+        drawScrollbar(g, leftX, leftWidth, pages.size(), spellScroll, ROW_HEIGHT);
+
+        // 页拖拽插入线（封存行不显示，改为禁止标记）
+        if (activeDragType == DRAG_PAGE) drawPageInsertLine(g);
     }
 
-    private void drawCatalog(GuiGraphics g, int mx, int my) {
+    /** 小挂锁图标（两笔 U 形锁梁 + 锁体），不依赖字体里的 emoji。 */
+    private void drawPadlock(GuiGraphics g, int x, int y, int color) {
+        g.fill(x + 1, y, x + 5, y + 1, color);          // 锁梁顶
+        g.fill(x + 1, y + 1, x + 2, y + 4, color);      // 锁梁左
+        g.fill(x + 4, y + 1, x + 5, y + 4, color);      // 锁梁右
+        g.fill(x, y + 4, x + 6, y + 9, color);          // 锁体
+        g.fill(x + 2, y + 6, x + 4, y + 8, 0xFF2A2114); // 锁孔
+    }
+
+    private void drawFrame(GuiGraphics g, int x1, int y1, int x2, int y2, int thickness, int color) {
+        g.fill(x1, y1, x2, y1 + thickness, color);
+        g.fill(x1, y2 - thickness, x2, y2, color);
+        g.fill(x1, y1, x1 + thickness, y2, color);
+        g.fill(x2 - thickness, y1, x2, y2, color);
+    }
+
+    private void drawCross(GuiGraphics g, int cx, int cy, int size, int color) {
+        int half = Math.max(2, size / 2);
+        for (int i = -half; i <= half; i++) {
+            g.fill(cx + i, cy + i, cx + i + 1, cy + i + 1, color);
+            g.fill(cx + i, cy - i, cx + i + 1, cy - i + 1, color);
+        }
+    }
+
+    private void drawPageInsertLine(GuiGraphics g) {
+        int dropRow = pageDropRow(dragMouseY);
+        if (dropRow < 0) {
+            drawCross(g, (int) dragMouseX, (int) dragMouseY, 10, 0xFFFF5555);
+            return;
+        }
+        if (!isPageDropAllowed(dropRow)) {
+            drawCross(g, (int) dragMouseX, (int) dragMouseY, 10, 0xFFFF5555);
+            return;
+        }
+        int rowInView = dropRow - spellScroll;
+        int y = LIST_TOP + rowInView * ROW_HEIGHT - 1;
+        int contentRight = leftX + leftWidth - SCROLLBAR_WIDTH;
+        g.fill(leftX + 2, y, contentRight - 2, y + 2, COLOR_ACCENT);
+    }
+
+    // ---- 中栏：图案库 ----
+
+    private void drawCatalog(GuiGraphics g, double mx, double my) {
         int top = LIST_TOP, bottom = listBottom;
         int contentRight = middleX + middleWidth - SCROLLBAR_WIDTH;
-        g.enableScissor(middleX, top, contentRight, bottom);
-        int visible = (bottom - top) / ROW_HEIGHT;
+        int visible = Math.max(1, (bottom - top) / ROW_HEIGHT);
         int maxScroll = Math.max(0, filteredCatalog.size() - visible);
-        catalogScroll = Math.max(0, Math.min(catalogScroll, maxScroll));
+        catalogScroll = Mth.clamp(catalogScroll, 0, maxScroll);
+        g.enableScissor(middleX, top, contentRight, bottom);
         for (int i = 0; i < visible; i++) {
             int idx = i + catalogScroll;
             if (idx >= filteredCatalog.size()) break;
@@ -302,59 +582,157 @@ public class StaffLibScreen extends Screen {
             int fill = selected ? 0xAA315E5B : (i % 2 == 0 ? 0x331E252C : 0x332A3138);
             g.fill(middleX, y, contentRight, y + ROW_HEIGHT - 2, fill);
             g.drawString(font, trim(filteredCatalog.get(idx).displayName(), contentRight - middleX - 8),
-                middleX + 6, y + 5, selected ? 0xD7FFED : 0xE2E6EA);
+                middleX + 6, y + 5, selected ? 0xD7FFED : COLOR_TEXT);
         }
         g.disableScissor();
-        drawScrollbar(g, middleX, middleWidth, filteredCatalog.size(), catalogScroll);
+        drawScrollbar(g, middleX, middleWidth, filteredCatalog.size(), catalogScroll, ROW_HEIGHT);
     }
 
-    private void drawSequence(GuiGraphics g, int mx, int my) {
-        int top = LIST_TOP, bottom = listBottom;
-        int contentRight = rightX + rightWidth - SCROLLBAR_WIDTH;
-        g.enableScissor(rightX, top, contentRight, bottom);
-        List<CompoundTag> iotas = draft == null ? List.of() : draft.iotas();
-        int slotSize = SEQUENCE_SLOT_SIZE, slotGap = 4;
-        int usable = contentRight - rightX - 8;
-        int columns = Math.max(1, Math.min(SEQUENCE_COLUMNS, usable / (slotSize + slotGap)));
-        int rowsPerView = Math.max(1, (bottom - top - 4) / (slotSize + slotGap));
-        int totalRows = (iotas.size() + columns - 1) / columns + 1; // +1 empty slot row
-        int maxScroll = Math.max(0, totalRows - rowsPerView);
-        sequenceScroll = Math.max(0, Math.min(sequenceScroll, maxScroll));
+    private int catalogRowAt(double mx, double my) {
+        if (mx < middleX || mx >= middleX + middleWidth - SCROLLBAR_WIDTH || my < LIST_TOP || my >= listBottom) return -1;
+        int row = catalogScroll + (int) ((my - LIST_TOP) / ROW_HEIGHT);
+        return row >= 0 && row < filteredCatalog.size() ? row : -1;
+    }
 
-        int gridWidth = columns * slotSize + (columns - 1) * slotGap;
+    // ---- 右栏：序列（绘制与命中共用同一个布局）----
+
+    /** 序列网格布局：{@code computeSeqLayout()} 是唯一来源，绘制与命中测试都读它（修 B10）。 */
+    private record SeqLayout(int startX, int startY, int columns, int rowsPerView, int totalRows,
+                             int slotSize, int slotGap, int top) {
+        int step() {
+            return slotSize + slotGap;
+        }
+    }
+
+    private SeqLayout computeSeqLayout() {
+        boolean sealed = isSealed(editingPage);
+        int top = LIST_TOP + (sealed ? SEALED_BANNER_HEIGHT : 0);
+        int bottom = listBottom;
+        int contentRight = rightX + rightWidth - SCROLLBAR_WIDTH;
+        int usable = contentRight - rightX - 8;
+        int columns = Math.max(1, Math.min(SEQUENCE_COLUMNS, usable / (SEQUENCE_SLOT_SIZE + SEQUENCE_SLOT_GAP)));
+        int rowsPerView = Math.max(1, (bottom - top - 4) / (SEQUENCE_SLOT_SIZE + SEQUENCE_SLOT_GAP));
+        int totalRows = draftIotas.size() / columns + 1; // 末尾总留一行空槽
+        int gridWidth = columns * SEQUENCE_SLOT_SIZE + (columns - 1) * SEQUENCE_SLOT_GAP;
         int startX = rightX + Math.max(0, (contentRight - rightX - gridWidth) / 2);
-        int startY = top + 4;
-        for (int row = sequenceScroll; row < sequenceScroll + rowsPerView && row < totalRows; row++) {
-            for (int col = 0; col < columns; col++) {
-                int slotIdx = row * columns + col;
-                int x = startX + col * (slotSize + slotGap);
-                int y = startY + (row - sequenceScroll) * (slotSize + slotGap);
-                boolean occupied = slotIdx < iotas.size();
+        return new SeqLayout(startX, top + 4, columns, rowsPerView, totalRows,
+            SEQUENCE_SLOT_SIZE, SEQUENCE_SLOT_GAP, top);
+    }
+
+    /** 鼠标所在格子（可能 &gt;= iotas.size()，即末尾空槽）；不在格子上（含格间空隙）返回 -1。 */
+    private int sequenceSlotAt(double mx, double my) {
+        if (editingPage <= 0) return -1;
+        if (mx < rightX || mx >= rightX + rightWidth || my < LIST_TOP || my >= listBottom) return -1;
+        SeqLayout layout = computeSeqLayout();
+        double localX = mx - layout.startX();
+        double localY = my - layout.startY();
+        if (localX < 0 || localY < 0) return -1;
+        int step = layout.step();
+        int col = (int) (localX / step);
+        int rowInView = (int) (localY / step);
+        if (col >= layout.columns() || rowInView >= layout.rowsPerView()) return -1;
+        if (localX - col * step >= layout.slotSize()) return -1;   // 格子间隙不算格子
+        if (localY - rowInView * step >= layout.slotSize()) return -1;
+        int row = rowInView + sequenceScroll;
+        if (row >= layout.totalRows()) return -1;
+        return row * layout.columns() + col;
+    }
+
+    /** 拖放位置：按落点在格子左/右半决定插到它前面还是后面（修 B12）。 */
+    private int sequenceInsertionIndexAt(double mx, double my) {
+        SeqLayout layout = computeSeqLayout();
+        int slot = sequenceSlotAt(mx, my);
+        if (slot < 0) {
+            // 落在网格下方 → 末尾；上方 → 开头
+            return my >= layout.startY() ? draftIotas.size() : 0;
+        }
+        int col = slot % layout.columns();
+        double localX = mx - layout.startX() - col * layout.step();
+        boolean rightHalf = localX >= layout.slotSize() / 2.0;
+        int base = Math.min(slot, draftIotas.size());
+        return rightHalf ? base + 1 : base;
+    }
+
+    private void drawSequence(GuiGraphics g, double mx, double my) {
+        boolean sealed = isSealed(editingPage);
+        SeqLayout layout = computeSeqLayout();
+        int contentRight = rightX + rightWidth - SCROLLBAR_WIDTH;
+        int maxScroll = Math.max(0, layout.totalRows() - layout.rowsPerView());
+        sequenceScroll = Mth.clamp(sequenceScroll, 0, maxScroll);
+        int hoverSlot = sequenceSlotAt(mx, my);
+
+        if (editingPage <= 0) {
+            g.drawCenteredString(font, Component.translatable("almightly_staff.gui.no_page"),
+                rightX + rightWidth / 2, LIST_TOP + 20, 0xFF777777);
+            return;
+        }
+        if (sealed) drawSealedBanner(g);
+
+        g.enableScissor(rightX, layout.top(), contentRight, listBottom);
+        for (int rowInView = 0; rowInView < layout.rowsPerView(); rowInView++) {
+            int row = rowInView + sequenceScroll;
+            if (row >= layout.totalRows()) break;
+            for (int col = 0; col < layout.columns(); col++) {
+                int slotIdx = row * layout.columns() + col;
+                int x = layout.startX() + col * layout.step();
+                int y = layout.startY() + rowInView * layout.step();
+                boolean occupied = slotIdx < draftIotas.size();
                 boolean selected = occupied && selectedSlots.contains(slotIdx);
-                boolean hover = mx >= x && mx < x + slotSize && my >= y && my < y + slotSize;
+                boolean hover = slotIdx == hoverSlot;
                 if (occupied) {
-                    drawSequenceSlot(g, x, y, slotSize, selected, hover);
-                    renderSlotIota(g, iotas.get(slotIdx), x + 1, y + 1, slotSize - 2);
-                } else {
-                    // empty slot: click to draw
+                    drawSequenceSlot(g, x, y, layout.slotSize(), selected, hover);
+                    renderSlotIota(g, draftIotas.get(slotIdx), x + 1, y + 1, layout.slotSize() - 2);
+                } else if (!sealed) {
                     int border = hover ? 0xFFD7B5FF : 0xFF3A414A;
-                    g.fill(x, y, x + slotSize, y + slotSize, border);
-                    g.fill(x + 1, y + 1, x + slotSize - 1, y + slotSize - 1, hover ? 0xFF2C2C35 : 0xFF20252B);
-                    if (hover && draft != null && draft.pageIndex() > 0) {
-                        g.drawCenteredString(font, "+", x + slotSize / 2, y + slotSize / 2 - 4, 0xFF9C6ADE);
+                    g.fill(x, y, x + layout.slotSize(), y + layout.slotSize(), border);
+                    g.fill(x + 1, y + 1, x + layout.slotSize() - 1, y + layout.slotSize() - 1,
+                        hover ? 0xFF2C2C35 : 0xFF20252B);
+                    if (hover) {
+                        g.drawCenteredString(font, "+", x + layout.slotSize() / 2,
+                            y + layout.slotSize() / 2 - 4, COLOR_ACCENT);
                     }
                 }
             }
         }
-        g.disableScissor();
-        drawScrollbar(g, rightX, rightWidth, totalRows, sequenceScroll);
-        // 悬停已填充格子：显示该 iota 的数值 tooltip
-        if (draft != null && mx >= rightX && mx < rightX + rightWidth && my >= LIST_TOP && my < listBottom) {
-            int hoverSlot = sequenceSlotAt(mx, my);
-            if (hoverSlot >= 0 && hoverSlot < iotas.size()) {
-                g.renderTooltip(font, displayOf(iotas.get(hoverSlot)), mx, my);
+        // 序列拖拽插入线
+        if (activeDragType == DRAG_SEQUENCE && !sealed) {
+            int dropIndex = sequenceInsertionIndexAt(dragMouseX, dragMouseY);
+            int row = dropIndex / layout.columns();
+            int col = dropIndex % layout.columns();
+            int x = layout.startX() + col * layout.step() - (dropIndex == draftIotas.size() ? 0 : 2);
+            int y = layout.startY() + (row - sequenceScroll) * layout.step();
+            if (row - sequenceScroll >= 0 && row - sequenceScroll <= layout.rowsPerView()) {
+                g.fill(x, y, x + 2, y + layout.slotSize(), COLOR_ACCENT);
             }
         }
+        g.disableScissor();
+        drawScrollbar(g, rightX, rightWidth, layout.totalRows(), sequenceScroll, layout.step());
+        if (sealed) drawFrame(g, rightX, LIST_TOP, contentRight + SCROLLBAR_WIDTH, listBottom, 2, COLOR_SEALED_BORDER);
+
+        if (hoverSlot >= 0 && hoverSlot < draftIotas.size()) {
+            Component hover = sequenceHoverName(draftIotas.get(hoverSlot));
+            g.renderTooltip(font, hover != null ? hover : StaffHex.displayOfTag(draftIotas.get(hoverSlot)), (int) mx, (int) my);
+        }
+    }
+
+    private void drawSealedBanner(GuiGraphics g) {
+        int y = LIST_TOP;
+        g.fill(rightX, y, rightX + rightWidth - SCROLLBAR_WIDTH, y + SEALED_BANNER_HEIGHT - 2, 0x55E8A82E);
+        drawPadlock(g, rightX + 5, y + 3, COLOR_SEALED_BORDER);
+        g.drawString(font, Component.translatable("almightly_staff.gui.sealed_readonly"),
+            rightX + 16, y + 3, COLOR_SEALED_TEXT);
+    }
+
+    /** 悬停名称：图案 iota 且能解析到已注册动作 → 显示其本地化名称；否则 null（回退 getDisplay）。 */
+    private Component sequenceHoverName(CompoundTag tag) {
+        if (!StaffHex.isPatternTag(tag)) return null;
+        try {
+            Iota i = StaffHex.deserializeIota(tag); // 图案无需 level
+            if (i instanceof PatternIota pi) {
+                return StaffHex.patternDisplayName(StaffHex.refFor(pi.getPattern()));
+            }
+        } catch (Exception ignored) { }
+        return null;
     }
 
     /** CyberStaff slot style: border + fill + top highlight. */
@@ -367,10 +745,10 @@ public class StaffLibScreen extends Screen {
     }
 
     private void renderSlotIota(GuiGraphics g, CompoundTag tag, int x, int y, int size) {
-        if (isPatternTag(tag)) {
+        if (StaffHex.isPatternTag(tag)) {
             // 图案：反序列化只需标签（pattern 无需 level），渲染真实图案
             try {
-                Iota iota = fromNbt(tag);
+                Iota iota = StaffHex.deserializeIota(tag);
                 if (iota instanceof PatternIota pi) {
                     PoseStack ps = g.pose();
                     ps.pushPose();
@@ -381,8 +759,8 @@ public class StaffLibScreen extends Screen {
                 }
             } catch (Exception ignored) { }
         }
-        // 非图案 iota：Hex 官方类型色方块（IotaType.getColor 等价）；数值由悬停 tooltip 显示
-        int color = colorOf(tag) | 0xFF000000;
+        // 非图案 iota：Hex 官方类型色方块（StaffHex.colorOfTag(tag)）；数值由悬停 tooltip 显示
+        int color = StaffHex.colorOfTag(tag) | 0xFF000000;
         int cx = x + size / 2, cy = y + size / 2;
         int half = Math.max(3, size / 4);
         g.fill(cx - half, cy - half, cx + half + 1, cy + half + 1, color);
@@ -391,12 +769,9 @@ public class StaffLibScreen extends Screen {
 
     // ==================== 图案目录悬停详情 tooltip（参考 CyberStaff drawPatternTooltip） ====================
 
-    private PatternCatalogEntry hoveredCatalogEntry(int mx, int my) {
-        if (draft == null || my < LIST_TOP || my >= listBottom || mx < middleX || mx >= middleX + middleWidth) return null;
-        int row = (my - LIST_TOP) / ROW_HEIGHT;
-        int idx = catalogScroll + row;
-        if (idx < 0 || idx >= filteredCatalog.size()) return null;
-        return filteredCatalog.get(idx);
+    private PatternCatalogEntry hoveredCatalogEntry(double mx, double my) {
+        int row = catalogRowAt(mx, my);
+        return row < 0 ? null : filteredCatalog.get(row);
     }
 
     /** 树堆改变：优先用手册 JSON 的 input/output，没有则回退到常见动作对照表。 */
@@ -455,7 +830,6 @@ public class StaffLibScreen extends Screen {
     private String patternDescription(PatternRef pattern) {
         String actionId = pattern.actionId();
         if (actionId.isEmpty() || pattern.signature().isBlank()) return "";
-        // 数字常量：无手册页，直接显示数值
         if (actionId.startsWith("hexcasting:number/")) {
             return Component.translatable("almightly_staff.gui.number_desc",
                 actionId.substring(actionId.lastIndexOf('/') + 1)).getString();
@@ -484,10 +858,11 @@ public class StaffLibScreen extends Screen {
     }
 
     /** 图案目录悬停时的详情框（CyberStaff 风格：深背景 + 紫色边）。 */
-    private void drawCatalogTooltip(GuiGraphics g, int mx, int my) {
+    private void drawCatalogTooltip(GuiGraphics g, double mouseX, double mouseY) {
         if (menuOpen || activeDragType != DRAG_NONE || pendingDragType != DRAG_NONE) return;
-        PatternCatalogEntry entry = hoveredCatalogEntry(mx, my);
+        PatternCatalogEntry entry = hoveredCatalogEntry(mouseX, mouseY);
         if (entry == null) return;
+        int mx = (int) mouseX, my = (int) mouseY;
         PatternRef pattern = entry.pattern();
         String summary = patternSummary(pattern);
         String description = patternDescription(pattern);
@@ -495,204 +870,390 @@ public class StaffLibScreen extends Screen {
         psBox.pushPose();
         psBox.translate(0.0F, 0.0F, 600.0F); // 抬高 z：不低于目录/按钮文字
         try {
-        int previewSize = 40;
-        int maxWidth = Math.max(200, width - 8);
-        int tooltipWidth = Math.min(Math.max(220, width / 2), maxWidth);
-        int textWidth = Math.max(48, tooltipWidth - previewSize - 24);
-        List<net.minecraft.util.FormattedCharSequence> nameLines = font.split(entry.displayName(), textWidth);
-        List<net.minecraft.util.FormattedCharSequence> summaryLines = summary.isEmpty() ? List.of()
-            : font.split(Component.literal(summary).withStyle(ChatFormatting.GRAY), textWidth);
-        List<net.minecraft.util.FormattedCharSequence> descLines = description.isEmpty() ? List.of()
-            : font.split(Component.literal(description).withStyle(ChatFormatting.GRAY), textWidth);
-        int lineH = 10;
-        int textHeight = 8 + (nameLines.size() + summaryLines.size() + descLines.size()) * lineH + 8;
-        int tooltipHeight = Math.max(previewSize + 16, textHeight);
-        int tooltipX = mx + 12, tooltipY = my + 12;
-        if (tooltipX + tooltipWidth > width) tooltipX = mx - tooltipWidth - 12;
-        if (tooltipY + tooltipHeight > height) tooltipY = height - tooltipHeight - 6;
-        tooltipX = Math.max(4, tooltipX);
-        tooltipY = Math.max(4, tooltipY);
-        // 框体（CyberStaff 风格）
-        g.fill(tooltipX - 1, tooltipY - 1, tooltipX + tooltipWidth + 1, tooltipY + tooltipHeight + 1, 0xF0100010);
-        g.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xF018111F);
-        g.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 1, 0xFF9C6ADE);
-        g.fill(tooltipX, tooltipY + tooltipHeight - 1, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xFF4B2F68);
-        g.fill(tooltipX, tooltipY, tooltipX + 1, tooltipY + tooltipHeight, 0xFF9C6ADE);
-        g.fill(tooltipX + tooltipWidth - 1, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xFF4B2F68);
-        // 图案预览
-        int previewX = tooltipX + 8, previewY = tooltipY + 8;
-        if (!pattern.signature().isBlank()) {
-            PoseStack ps = g.pose();
-            ps.pushPose();
-            StaffHex.renderPattern(pattern, ps, previewX, previewY, previewSize);
-            ps.popPose();
-        }
-        // 文本
-        int textX = previewX + previewSize + 8;
-        int textY = tooltipY + 8;
-        for (var c : nameLines) { g.drawString(font, c, textX, textY, 0xFFFFFFFF); textY += lineH; }
-        textY += 2;
-        for (var c : summaryLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0); textY += lineH; }
-        for (var c : descLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0); textY += lineH; }
+            int previewSize = 40;
+            int maxWidth = Math.max(200, width - 8);
+            int tooltipWidth = Math.min(Math.max(220, width / 2), maxWidth);
+            int textWidth = Math.max(48, tooltipWidth - previewSize - 24);
+            List<net.minecraft.util.FormattedCharSequence> nameLines = font.split(entry.displayName(), textWidth);
+            List<net.minecraft.util.FormattedCharSequence> summaryLines = summary.isEmpty() ? List.of()
+                : font.split(Component.literal(summary).withStyle(ChatFormatting.GRAY), textWidth);
+            List<net.minecraft.util.FormattedCharSequence> descLines = description.isEmpty() ? List.of()
+                : font.split(Component.literal(description).withStyle(ChatFormatting.GRAY), textWidth);
+            int lineH = 10;
+            int textHeight = 8 + (nameLines.size() + summaryLines.size() + descLines.size()) * lineH + 8;
+            int tooltipHeight = Math.max(previewSize + 16, textHeight);
+            int tooltipX = mx + 12, tooltipY = my + 12;
+            if (tooltipX + tooltipWidth > width) tooltipX = mx - tooltipWidth - 12;
+            if (tooltipY + tooltipHeight > height) tooltipY = height - tooltipHeight - 6;
+            tooltipX = Math.max(4, tooltipX);
+            tooltipY = Math.max(4, tooltipY);
+            g.fill(tooltipX - 1, tooltipY - 1, tooltipX + tooltipWidth + 1, tooltipY + tooltipHeight + 1, 0xF0100010);
+            g.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xF018111F);
+            g.fill(tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + 1, COLOR_ACCENT);
+            g.fill(tooltipX, tooltipY + tooltipHeight - 1, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xFF4B2F68);
+            g.fill(tooltipX, tooltipY, tooltipX + 1, tooltipY + tooltipHeight, COLOR_ACCENT);
+            g.fill(tooltipX + tooltipWidth - 1, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight, 0xFF4B2F68);
+            int previewX = tooltipX + 8, previewY = tooltipY + 8;
+            if (!pattern.signature().isBlank()) {
+                PoseStack ps = g.pose();
+                ps.pushPose();
+                StaffHex.renderPattern(pattern, ps, previewX, previewY, previewSize);
+                ps.popPose();
+            }
+            int textX = previewX + previewSize + 8;
+            int textY = tooltipY + 8;
+            for (var c : nameLines) { g.drawString(font, c, textX, textY, 0xFFFFFFFF); textY += lineH; }
+            textY += 2;
+            for (var c : summaryLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0); textY += lineH; }
+            for (var c : descLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0); textY += lineH; }
         } finally {
             psBox.popPose();
         }
     }
 
+    /** 顶部状态条：左侧施法提示，右侧操作反馈（底部两行按钮已占满，放这儿不会压住列表）。 */
     private void drawFooter(GuiGraphics g) {
-        g.drawCenteredString(font, Component.translatable("almightly_staff.gui.cast_hint"), width / 2, height - 70, 0xFF777777);
+        int maxWidth = Math.max(40, width / 2 - 60);
+        g.drawString(font, trim(Component.translatable("almightly_staff.gui.cast_hint"), maxWidth),
+            MARGIN, 13, 0xFF7A828C);
         if (statusTimer > 0 && !statusText.isEmpty()) {
-            g.drawCenteredString(font, Component.literal(statusText), width / 2, height - 92, 0xFFFFE3A3);
+            String text = trimText(statusText, maxWidth);
+            g.drawString(font, text, width - MARGIN - font.width(text), 13, 0xFFFFE3A3);
         }
+    }
+
+    /** CyberStaff scrollbar style: dark track + purple thumb；行高由调用方给（修 B16）。 */
+    private void drawScrollbar(GuiGraphics g, int x, int panelWidth, int total, int scroll, int rowHeight) {
+        int trackX = x + panelWidth - SCROLLBAR_WIDTH;
+        g.fill(trackX, LIST_TOP, trackX + SCROLLBAR_WIDTH, listBottom, 0xAA11161B);
+        int visible = Math.max(1, (listBottom - LIST_TOP) / rowHeight);
+        int maxScroll = Math.max(0, total - visible);
+        if (maxScroll <= 0) return;
+        int track = listBottom - LIST_TOP;
+        int thumb = Math.max(MIN_THUMB_HEIGHT, track * visible / Math.max(1, total));
+        int y = LIST_TOP + scroll * (track - thumb) / maxScroll;
+        g.fill(trackX + 1, y, trackX + SCROLLBAR_WIDTH - 1, y + thumb, COLOR_ACCENT);
     }
 
     @Override
     public void tick() {
         super.tick();
         if (statusTimer > 0) statusTimer--;
+        if (deleteConfirmTimer > 0) {
+            deleteConfirmTimer--;
+            if (deleteConfirmTimer == 0) {
+                deleteArmed = false;
+                updateDeleteButton();
+            }
+        }
         if (nameSaveTimer > 0) {
             nameSaveTimer--;
-            if (nameSaveTimer == 0) saveDraftNow(); // 改名自动保存
+            if (nameSaveTimer == 0) flushRename();
         }
-    }
-
-    /** CyberStaff scrollbar style: dark track + purple thumb. */
-    private void drawScrollbar(GuiGraphics g, int x, int panelWidth, int total, int scroll) {
-        int trackX = x + panelWidth - SCROLLBAR_WIDTH;
-        g.fill(trackX, LIST_TOP, trackX + SCROLLBAR_WIDTH, listBottom, 0xAA11161B);
-        int visible = Math.max(1, (listBottom - LIST_TOP) / ROW_HEIGHT);
-        int maxScroll = Math.max(0, total - visible);
-        if (maxScroll <= 0) return;
-        int track = listBottom - LIST_TOP;
-        int thumb = Math.max(MIN_THUMB_HEIGHT, track * visible / Math.max(1, total));
-        int y = LIST_TOP + scroll * (track - thumb) / maxScroll;
-        g.fill(trackX + 1, y, trackX + SCROLLBAR_WIDTH - 1, y + thumb, 0xFF9C6ADE);
     }
 
     // ==================== 页操作 ====================
-    private int nextFreePageIndex() {
-        boolean[] used = new boolean[65];
-        for (ModNetworking.PageData p : pages) used[p.pageIndex()] = true;
-        for (int i = 1; i <= 64; i++) if (!used[i]) return i;
-        return 64;
+
+    private void newPage() {
+        focusNameAfterSync = true;
+        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageOpC2S(ModNetworking.OP_NEW, 0, 0, false, ""));
     }
 
-    private void newSpell() {
-        int idx = nextFreePageIndex();
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageWriteC2S(idx,
-            Component.translatable("almightly_staff.gui.unnamed").getString(), List.of()));
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageSelectC2S(idx));
+    private void duplicatePage() {
+        if (editingPage <= 0) return;
+        ModNetworking.PageData page = findPage(editingPage);
+        if (page == null) return;
+        focusNameAfterSync = true;
+        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageOpC2S(
+            ModNetworking.OP_DUPLICATE, editingPage, 0, false, uniqueCopyName(page.name())));
     }
 
-    private void copySpell() {
-        if (draft == null || draft.pageIndex() == 0) return;
-        int idx = nextFreePageIndex();
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageWriteC2S(idx,
-            draft.name() + " " + Component.translatable("almightly_staff.gui.copy_suffix").getString(),
-            draft.iotas()));
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageSelectC2S(idx));
+    /** 新建/复制的回包生效后：滚动到该页并聚焦名字框（计划 §4.2）。 */
+    private void afterServerFocus() {
+        if (!focusNameAfterSync) return;
+        focusNameAfterSync = false;
+        if (editingPage <= 0) return;
+        scrollPageIntoView(editingPage);
+        beginRename();
     }
 
-    private void deleteSpell() {
-        if (draft == null || draft.pageIndex() == 0) return;
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageWriteC2S(draft.pageIndex(), "", List.of()));
-    }
-
-    private void moveSpell(int direction) {
-        if (selectedPageIndex < 0 || selectedPageIndex >= pages.size()) return;
-        int target = selectedPageIndex + direction;
-        if (target < 0 || target >= pages.size()) return;
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageSwapC2S(
-            pages.get(selectedPageIndex).pageIndex(), pages.get(target).pageIndex()));
-    }
-
-    private void applyPageSelection() {
-        if (selectedPageIndex >= 0 && selectedPageIndex < pages.size()) {
-            ModNetworking.sendToServer(new ModNetworking.MsgStaffPageSelectC2S(
-                pages.get(selectedPageIndex).pageIndex()));
+    /** 副本名去重：X → X (副本) → X (副本 2) → …，不会叠成 "X (副本) (副本)"。 */
+    private String uniqueCopyName(String baseName) {
+        String suffix = Component.translatable("almightly_staff.gui.copy_suffix").getString();
+        String stem = baseName == null ? "" : baseName.trim();
+        // 去掉末尾已有的 "(副本 N)"，从原始名字开始编号
+        String marker = suffix.trim();
+        while (!marker.isEmpty() && stem.endsWith(marker)) {
+            stem = stem.substring(0, stem.length() - marker.length()).trim();
         }
+        String candidate = stem.isEmpty() ? suffix.trim() : stem + " " + marker;
+        int n = 1;
+        while (nameTaken(candidate)) {
+            n++;
+            String indexed = Component.translatable("almightly_staff.gui.copy_suffix_n", n).getString();
+            candidate = stem.isEmpty() ? indexed.trim() : stem + " " + indexed;
+        }
+        return candidate;
+    }
+
+    private boolean nameTaken(String name) {
+        for (ModNetworking.PageData page : pages) if (page.name().equals(name)) return true;
+        return false;
+    }
+
+    /** 删除是两步确认：第一次点击进入确认态，3 秒内再点才真正删除（封存页不可删）。 */
+    private void requestDelete() {
+        if (editingPage <= 0) return;
+        if (isSealed(editingPage)) {
+            showStatus(Component.translatable("almightly_staff.gui.sealed_hint").getString());
+            return;
+        }
+        if (!deleteArmed) {
+            deleteArmed = true;
+            deleteConfirmTimer = DELETE_CONFIRM_TICKS;
+            updateDeleteButton();
+            return;
+        }
+        deleteArmed = false;
+        deleteConfirmTimer = 0;
+        updateDeleteButton();
+        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageOpC2S(
+            ModNetworking.OP_DELETE, editingPage, 0, false, ""));
+    }
+
+    private void updateDeleteButton() {
+        if (deleteButton == null) return;
+        boolean armed = deleteArmed;
+        boolean sealed = isSealed(editingPage);
+        deleteButton.setMessage(Component.translatable(armed
+            ? "almightly_staff.gui.confirm_delete"
+            : "almightly_staff.gui.delete"));
+        deleteButton.active = armed || (editingPage > 0 && !sealed);
+        deleteButton.setTooltip(sealed
+            ? Tooltip.create(Component.translatable("almightly_staff.gui.sealed_hint"))
+            : null);
+    }
+
+    /** 选中一页（同时切换 V 键施放页）。 */
+    private void selectPage(int pageIndex) {
+        setEditingPage(pageIndex);
+        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageOpC2S(
+            ModNetworking.OP_SELECT, pageIndex, 0, false, ""));
+        scrollPageIntoView(pageIndex);
+    }
+
+    private void scrollPageIntoView(int pageIndex) {
+        int row = pageRow(pageIndex);
+        if (row < 0) return;
+        int visible = visiblePageRows();
+        if (row < spellScroll) spellScroll = row;
+        else if (row >= spellScroll + visible) spellScroll = row - visible + 1;
+        spellScroll = Math.max(0, spellScroll);
+    }
+
+    /** 拖拽排序（替代上移/下移）：跨过 4px 才算拖拽，落点按行上/下半决定插前/插后。 */
+    private void finishPageDrag(double mx, double my) {
+        int from = activeDragIndex;
+        if (from <= 0) return;
+        if (isSealed(from)) {
+            showStatus(Component.translatable("almightly_staff.gui.sealed_hint").getString());
+            return;
+        }
+        int dropRow = pageDropRow(my);
+        if (dropRow < 0) return;
+        if (mx < leftX || mx >= leftX + leftWidth) return; // 拖到列表外 = 取消
+        int[] target = pageDropTarget(dropRow);
+        if (target == null) return;
+        if (target[0] == from) return;
+        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageOpC2S(
+            ModNetworking.OP_REORDER, from, target[0], target[1] != 0, ""));
+    }
+
+    /** 落点行（0..pages.size()，即"插在第 n 行之前"）；不在页列表内返回 -1。 */
+    private int pageDropRow(double my) {
+        if (my < LIST_TOP - 6 || my >= listBottom + 6) return -1;
+        int visible = visiblePageRows();
+        int rowInView = Mth.clamp((int) ((my - LIST_TOP) / ROW_HEIGHT), 0, visible - 1);
+        int row = rowInView + spellScroll;
+        boolean after = ((my - LIST_TOP) % ROW_HEIGHT) > ROW_HEIGHT / 2.0;
+        int dropRow = after ? row + 1 : row;
+        return Mth.clamp(dropRow, 0, pages.size());
+    }
+
+    /**
+     * 落点行 → {@code {目标页号, after?1:0}}；落点无效（封存页或被拖页自身）返回 null。
+     */
+    private int[] pageDropTarget(int dropRow) {
+        if (pages.isEmpty()) return null;
+        int targetRow = Math.min(dropRow, pages.size() - 1);
+        boolean after = dropRow > pages.size() - 1;
+        ModNetworking.PageData target = pages.get(targetRow);
+        if (target.sealed()) return null;
+        if (target.pageIndex() == activeDragIndex) return null;
+        return new int[]{target.pageIndex(), after ? 1 : 0};
+    }
+
+    private boolean isPageDropAllowed(int dropRow) {
+        return pageDropTarget(dropRow) != null && !isSealed(activeDragIndex);
     }
 
     // ==================== 序列操作 ====================
-    private void saveDraft() {
-        if (draft == null || draft.pageIndex() == 0) return;
-        pushUndo();
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageWriteC2S(
-            draft.pageIndex(), nameField.getValue().trim(), draft.iotas()));
+
+    private List<CompoundTag> copySequence() {
+        List<CompoundTag> copy = new ArrayList<>(draftIotas.size());
+        for (CompoundTag tag : draftIotas) copy.add(tag == null ? null : tag.copy());
+        return copy;
     }
 
-    private void appendCatalogPattern() {
+    private boolean sameSequence(List<CompoundTag> a, List<CompoundTag> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            CompoundTag x = a.get(i), y = b.get(i);
+            if (x == null || y == null) {
+                if (x != y) return false;
+            } else if (!x.equals(y)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void undoSequenceChange() {
+        if (!canEditContent() || undoHistory.isEmpty()) return;
+        redoHistory.addFirst(copySequence());
+        replaceSequence(undoHistory.removeFirst());
+        saveDraftNow();
+    }
+
+    private void redoSequenceChange() {
+        if (!canEditContent() || redoHistory.isEmpty()) return;
+        undoHistory.addFirst(copySequence());
+        replaceSequence(redoHistory.removeFirst());
+        saveDraftNow();
+    }
+
+    private void replaceSequence(List<CompoundTag> sequence) {
+        draftIotas.clear();
+        for (CompoundTag tag : sequence) draftIotas.add(tag == null ? null : tag.copy());
+        clearSelection();
+    }
+
+    /** 立即把当前页内容写到服务端（所有编辑都自动保存，不再有"保存"按钮）。 */
+    private void saveDraftNow() {
+        if (!canEditContent()) return;
+        syncLocalPage();
+        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageWriteC2S(editingPage, new ArrayList<>(draftIotas)));
+    }
+
+    /** 改名走独立的 RENAME 操作，立即 flush（切页/失焦/Enter/Ctrl+S/关窗）。 */
+    private void flushRename() {
+        nameSaveTimer = 0;
+        if (editingPage <= 0 || nameField == null) return;
+        int row = pageRow(editingPage);
+        if (row < 0) return;
+        String newName = nameFieldText();
+        if (newName.equals(pages.get(row).name())) return;
+        syncLocalPage();
+        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageOpC2S(
+            ModNetworking.OP_RENAME, editingPage, 0, false, newName));
+    }
+
+    /**
+     * 添加图案：有选中格 → 插到最后一个选中格之后；没有选中 → 追加到末尾（计划 §4.6，双击同此规则）。
+     */
+    private void addCatalogPattern() {
+        if (!canEditContent()) return;
         if (selectedCatalogIndex < 0 || selectedCatalogIndex >= filteredCatalog.size()) return;
         PatternCatalogEntry entry = filteredCatalog.get(selectedCatalogIndex);
         PatternRef ref = entry.pattern();
         if (ref.signature().isBlank()) {
             // 卓越法术：自动用 ParseCode（代码→图案）检验，能转换则添加
-            requestGreatSpellAutoParse(entry.pattern().actionId(), -1);
+            requestGreatSpellAutoParse(ref.actionId(), -1);
             return;
         }
+        int insertAt = selectedSlots.isEmpty()
+            ? draftIotas.size()
+            : Math.min(Collections.max(selectedSlots) + 1, draftIotas.size());
         pushUndo();
-        draft.iotas().add(toNbt(new PatternIota(StaffHex.patternFor(ref))));
-        saveDraftNow(); // 添加即保存
+        draftIotas.add(insertAt, StaffHex.serializeIota(new PatternIota(StaffHex.patternFor(ref))));
+        clearSelection();
+        selectedSlots.add(insertAt);
+        selectionAnchor = insertAt;
+        saveDraftNow();
     }
 
     private void pushUndo() {
-        if (draft == null) return;
-        sequenceUndoHistory.addFirst(new ArrayList<>(draft.iotas()));
-        while (sequenceUndoHistory.size() > MAX_UNDO_HISTORY) sequenceUndoHistory.removeLast();
-    }
-
-    private void undoSequenceChange() {
-        if (draft == null || sequenceUndoHistory.isEmpty()) return;
-        draft.iotas().clear();
-        draft.iotas().addAll(sequenceUndoHistory.removeFirst());
-        clearSelection();
-        saveDraftNow(); // 撤销即保存
+        if (!canEditContent()) return;
+        undoHistory.addFirst(copySequence());
+        while (undoHistory.size() > MAX_UNDO_HISTORY) undoHistory.removeLast();
+        redoHistory.clear();
     }
 
     /** 绘制完成回调：填充或覆盖指定槽位，并立即保存到服务端。 */
     private void onPatternDrawn(int slotIndex, PatternRef ref) {
-        if (draft == null) return;
+        if (!canEditContent()) return;
         pushUndo();
-        CompoundTag tag = toNbt(new PatternIota(StaffHex.patternFor(ref)));
-        if (slotIndex >= 0 && slotIndex < draft.iotas().size()) {
-            draft.iotas().set(slotIndex, tag); // 覆盖
+        CompoundTag tag = StaffHex.serializeIota(new PatternIota(StaffHex.patternFor(ref)));
+        if (slotIndex >= 0 && slotIndex < draftIotas.size()) {
+            draftIotas.set(slotIndex, tag); // 覆盖
         } else {
-            draft.iotas().add(tag); // 追加到末尾空格
+            draftIotas.add(tag); // 追加到末尾空格
         }
         saveDraftNow();
         learnDrawnGreatSpell(ref);
     }
 
-    /** 立即把当前草稿写入服务端（返回主界面后会重新同步）。 */
-    private void saveDraftNow() {
-        if (draft == null || draft.pageIndex() == 0) return;
-        String name = nameField != null ? nameField.getValue().trim() : draft.name();
-        ModNetworking.sendToServer(new ModNetworking.MsgStaffPageWriteC2S(
-            draft.pageIndex(), name, draft.iotas()));
-    }
-
     private void openDrawGui(int slotIndex) {
+        if (!canEditContent()) return;
+        flushRename();
         minecraft.setScreen(new StaffDrawScreen(this, ref -> onPatternDrawn(slotIndex, ref)));
     }
 
+    /** 向后绘制回调：新图案插入到 targetSlot 之后一格。 */
+    private void onPatternDrawnInsert(int targetSlot, PatternRef ref) {
+        if (!canEditContent()) return;
+        pushUndo();
+        CompoundTag tag = StaffHex.serializeIota(new PatternIota(StaffHex.patternFor(ref)));
+        int insertAt = Math.max(0, Math.min(targetSlot + 1, draftIotas.size()));
+        draftIotas.add(insertAt, tag);
+        clearSelection();
+        selectedSlots.add(insertAt);
+        selectionAnchor = insertAt;
+        saveDraftNow();
+        learnDrawnGreatSpell(ref);
+    }
+
+    /** 打开"向后绘制"画布：画完插入到 targetSlot 之后。 */
+    private void openDrawInsertAfter(int targetSlot) {
+        if (!canEditContent()) return;
+        flushRename();
+        minecraft.setScreen(new StaffDrawScreen(this, ref -> onPatternDrawnInsert(targetSlot, ref)));
+    }
+
     // ==================== Parse ====================
-    /** 进入 Parse 文本模式：请求服务端把当前法术转为代码，回包后打开文本编辑器。 */
+
+    /** 进入 Parse 文本模式：请求服务端把当前页转为代码，回包后打开文本编辑器。 */
     private void enterParseMode() {
-        if (draft == null) return;
-        ModNetworking.sendToServer(new ModNetworking.MsgParseToCodeC2S(new ArrayList<>(draft.iotas())));
+        if (!canEditContent()) return;
+        if (!dev.architectury.platform.Platform.isModLoaded("hexparse")) {
+            showStatus(Component.translatable("almightly_staff.gui.hexparse_missing").getString());
+            return;
+        }
+        flushRename();
+        ModNetworking.sendToServer(new ModNetworking.MsgParseToCodeC2S(ModNetworking.buildListTag(draftIotas)));
     }
 
     public void onParseCode(String code) {
+        int page = editingPage;
         minecraft.setScreen(new StaffParseScreen(this, code, parsed -> {
-            if (parsed != null) {
-                if (draft == null) return;
+            if (parsed != null && canEditContent() && editingPage == page) {
                 // 代码→图案转换结果中若有卓越法术，学习其签名
                 for (Iota i : parsed) {
                     if (i instanceof PatternIota pi) learnDrawnGreatSpell(StaffHex.refFor(pi.getPattern()));
                 }
                 pushUndo();
-                draft.iotas().clear();
-                for (Iota i : parsed) if (i != null) draft.iotas().add(toNbt(i));
+                draftIotas.clear();
+                for (Iota i : parsed) if (i != null) draftIotas.add(StaffHex.serializeIota(i));
                 saveDraftNow(); // 解析结果立即写回服务端
             }
             minecraft.setScreen(this);
@@ -700,20 +1261,29 @@ public class StaffLibScreen extends Screen {
     }
 
     // ==================== 交互 ====================
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // 菜单打开时优先处理菜单（可能与其他按钮重叠，菜单选项优先级更高）
+        // 点空白/其它区域让输入框失焦，否则 Delete 会删名字里的字（修 B11）
+        if (nameField != null && nameField.isFocused() && !nameField.isMouseOver(mouseX, mouseY)) {
+            flushRename();
+            this.setFocused((GuiEventListener) null);
+        }
+        if (searchField != null && searchField.isFocused() && !searchField.isMouseOver(mouseX, mouseY)) {
+            this.setFocused((GuiEventListener) null);
+        }
+        // 菜单打开时优先处理菜单；关闭菜单的这一次点击要被吞掉（修 B17）
         if (menuOpen) {
             if (clickSequenceMenu(mouseX, mouseY)) return true;
             menuOpen = false;
+            return true;
         }
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
         if (button == 0) {
             if (clickSpellList(mouseX, mouseY)) return true;
             if (clickCatalog(mouseX, mouseY)) return true;
             if (clickSequence(mouseX, mouseY)) return true;
-        }
-        if (button == 1) {
+        } else if (button == 1) {
             if (clickSequenceRight(mouseX, mouseY)) return true;
         }
         return false;
@@ -721,59 +1291,71 @@ public class StaffLibScreen extends Screen {
 
     private boolean clickSpellList(double mx, double my) {
         if (mx < leftX || mx >= leftX + leftWidth || my < LIST_TOP || my >= listBottom) return false;
-        int row = (int) my - LIST_TOP;
-        int idx = spellScroll + row / ROW_HEIGHT;
-        if (idx >= 0 && idx < pages.size()) {
-            selectedPageIndex = idx;
-            ModNetworking.sendToServer(new ModNetworking.MsgStaffPageSelectC2S(pages.get(idx).pageIndex()));
+        pageListFocused = true;
+        int row = spellRowAt(mx, my);
+        if (row < 0) return true;
+        ModNetworking.PageData page = pages.get(row);
+        long now = System.currentTimeMillis();
+        boolean doubleClick = row == lastPageClickRow && now - lastPageClickTime <= DOUBLE_CLICK_MS;
+        lastPageClickTime = now;
+        lastPageClickRow = row;
+        if (doubleClick) {
+            beginRename();
+            return true;
         }
+        deleteArmed = false;
+        deleteConfirmTimer = 0;
+        updateDeleteButton();
+        selectPage(page.pageIndex());
+        // 按下即开始待拖拽：移动超过阈值才算拖拽，否则就是单纯的点击选中
+        beginPendingDrag(DRAG_PAGE, page.pageIndex(), mx, my);
         return true;
+    }
+
+    /** 聚焦名字框并全选（F2 / 双击页行）。 */
+    private void beginRename() {
+        if (editingPage <= 0 || nameField == null) return;
+        this.setFocused(nameField);
+        nameField.setFocused(true);
+        nameField.moveCursorToEnd();
+        nameField.setHighlightPos(0);
     }
 
     private boolean clickCatalog(double mx, double my) {
         if (mx < middleX || mx >= middleX + middleWidth || my < LIST_TOP || my >= listBottom) return false;
-        int row = (int) my - LIST_TOP;
-        int idx = catalogScroll + row / ROW_HEIGHT;
-        if (idx >= 0 && idx < filteredCatalog.size()) {
-            selectedCatalogIndex = idx;
-            beginPendingDrag(DRAG_CATALOG, idx, mx, my); // 可拖到右侧序列插入
-        }
+        pageListFocused = false;
+        int row = catalogRowAt(mx, my);
+        if (row < 0) return true;
+        long now = System.currentTimeMillis();
+        boolean doubleClick = row == lastCatalogClickRow && now - lastCatalogClickTime <= DOUBLE_CLICK_MS;
+        lastCatalogClickTime = now;
+        lastCatalogClickRow = row;
+        selectedCatalogIndex = row;
+        if (doubleClick) addCatalogPattern(); // 双击 = 添加（P2）
+        else if (canEditContent()) beginPendingDrag(DRAG_CATALOG, row, mx, my); // 也可拖到序列插入
         return true;
-    }
-
-    private int sequenceSlotAt(double mx, double my) {
-        if (draft == null) return -1;
-        int slotWidth = SEQUENCE_SLOT_SIZE, slotGap = 4;
-        int usable = rightWidth - SCROLLBAR_WIDTH - 8;
-        int columns = Math.max(1, Math.min(SEQUENCE_COLUMNS, usable / (slotWidth + slotGap)));
-        int startX = rightX + 4, startY = LIST_TOP + 4;
-        int col = (int) ((mx - startX) / (slotWidth + slotGap));
-        int row = (int) ((my - startY) / (slotWidth + slotGap)) + sequenceScroll;
-        if (col < 0 || col >= columns) return -1;
-        return row * columns + col;
     }
 
     private boolean clickSequence(double mx, double my) {
         if (mx < rightX || mx >= rightX + rightWidth || my < LIST_TOP || my >= listBottom) return false;
-        if (draft == null || draft.pageIndex() == 0) return false;
+        pageListFocused = false;
+        if (editingPage <= 0) return true;
         int slot = sequenceSlotAt(mx, my);
-        if (slot < 0) return false;
-        List<CompoundTag> iotas = draft.iotas();
-        if (slot >= iotas.size()) {
+        if (slot < 0) return true;
+        if (slot >= draftIotas.size()) {
+            // 点末尾空格 → 绘制追加（封存页不显示空格，也就走不到这里）
             clearSelection();
             menuOpen = false;
-            openDrawGui(-1); // 点击空格 → 绘制追加
+            openDrawGui(-1);
             return true;
         }
-        // 已填充：单击选中 / Ctrl多选 / Shift范围选 + 可拖拽重排
-        boolean ctrl = Screen.hasControlDown();
-        boolean shift = Screen.hasShiftDown();
-        if (shift && selectionAnchor >= 0) {
+        // 已填充：单击选中 / Ctrl 多选 / Shift 范围选；随后可拖拽重排（多选整块移动）
+        if (Screen.hasShiftDown() && selectionAnchor >= 0) {
             selectedSlots.clear();
             int lo = Math.min(selectionAnchor, slot);
             int hi = Math.max(selectionAnchor, slot);
-            for (int i = lo; i <= hi && i < iotas.size(); i++) selectedSlots.add(i);
-        } else if (ctrl) {
+            for (int i = lo; i <= hi && i < draftIotas.size(); i++) selectedSlots.add(i);
+        } else if (Screen.hasControlDown()) {
             if (!selectedSlots.remove(slot)) selectedSlots.add(slot);
             selectionAnchor = slot;
         } else {
@@ -788,45 +1370,69 @@ public class StaffLibScreen extends Screen {
 
     private boolean clickSequenceRight(double mx, double my) {
         if (mx < rightX || mx >= rightX + rightWidth || my < LIST_TOP || my >= listBottom) return false;
-        if (draft == null || draft.pageIndex() == 0) return false;
+        if (editingPage <= 0) return false;
         int slot = sequenceSlotAt(mx, my);
         if (slot < 0) return false;
-        // 右键：空格子也弹菜单；无修饰键则重置选中为该格
         if (!Screen.hasControlDown() && !Screen.hasShiftDown()) {
             selectedSlots.clear();
-            if (slot < draft.iotas().size()) selectedSlots.add(slot);
+            if (slot < draftIotas.size()) selectedSlots.add(slot);
             selectionAnchor = slot;
-        } else if (slot < draft.iotas().size() && !selectedSlots.contains(slot)) {
+        } else if (slot < draftIotas.size() && !selectedSlots.contains(slot)) {
             selectedSlots.add(slot);
         }
         menuSlot = slot;
         menuX = (int) mx;
         menuY = (int) my;
+        int menuHeight = menuHeight();
         if (menuX + MENU_WIDTH > width) menuX = width - MENU_WIDTH - 2;
-        if (menuY + MENU_ITEM_HEIGHT * 5 + 2 > height) menuY = height - MENU_ITEM_HEIGHT * 5 - 4;
+        if (menuY + menuHeight > height) menuY = height - menuHeight - 4;
         menuOpen = true;
         return true;
     }
 
+    private int menuHeight() {
+        return MENU_ITEM_HEIGHT * MENU_ITEMS + 2;
+    }
+
+    private boolean menuItemEnabled(int item) {
+        boolean editable = canEditContent();
+        boolean hasSelection = !selectedSlots.isEmpty();
+        return switch (item) {
+            case 0 -> editable && hasSelection;                        // 移除
+            case 1 -> hasSelection;                                    // 复制（封存页也允许）
+            case 2 -> editable && !patternClipboard.isEmpty();          // 粘贴
+            case 3 -> editable && hasSelection;                        // 重绘覆盖
+            case 4 -> editable;                                        // 向后绘制
+            case 5 -> editable;                                        // 施法采集
+            default -> false;
+        };
+    }
+
     private boolean clickSequenceMenu(double mx, double my) {
-        if (mx < menuX || mx >= menuX + MENU_WIDTH || my < menuY || my >= menuY + MENU_ITEM_HEIGHT * 5 + 2) return false;
+        if (mx < menuX || mx >= menuX + MENU_WIDTH || my < menuY || my >= menuY + menuHeight()) return false;
         int item = (int) ((my - menuY - 1) / MENU_ITEM_HEIGHT);
-        if (item == 2 && patternClipboard.isEmpty()) { menuOpen = false; return true; }
+        if (item < 0 || item >= MENU_ITEMS) {
+            menuOpen = false;
+            return true;
+        }
+        menuOpen = false;
+        if (!menuItemEnabled(item)) return true;
         switch (item) {
             case 0 -> removeSelectedSlots();
             case 1 -> copyPattern();
-            case 2 -> pastePatternAt(menuSlot);
-            case 3 -> { int p = primarySelectedSlot(); if (p >= 0) openDrawGui(p); } // 重绘覆盖
-            case 4 -> openCastScreen(); // 真实施法采集栈
+            case 2 -> pasteClipboard();
+            case 3 -> openDrawGui(menuSlot);                       // 重绘覆盖：用右键那一格（修 B13）
+            case 4 -> openDrawInsertAfter(menuSlot);                // 向后绘制
+            case 5 -> openCastScreen();                             // 真实施法采集栈
             default -> { }
         }
-        menuOpen = false;
         return true;
     }
 
     /** 右键菜单（样式改编自 CyberStaff 的 drawSequenceMenu，致谢 Aurover）。z=600 抬高图层遮挡按键。 */
-    private void drawSequenceMenu(GuiGraphics g, int mx, int my) {
-        int h = MENU_ITEM_HEIGHT * 5 + 2;
+    private void drawSequenceMenu(GuiGraphics g, double mouseX, double mouseY) {
+        int mx = (int) mouseX, my = (int) mouseY;
+        int h = menuHeight();
         PoseStack ps = g.pose();
         ps.pushPose();
         ps.translate(0.0F, 0.0F, 600.0F);
@@ -835,19 +1441,11 @@ public class StaffLibScreen extends Screen {
             g.fill(menuX, menuY, menuX + MENU_WIDTH, menuY + h, 0xF022272D);
             String[] keys = {"almightly_staff.gui.remove", "almightly_staff.gui.copy_pattern",
                 "almightly_staff.gui.paste_pattern", "almightly_staff.gui.redraw",
-                "almightly_staff.gui.cast_collect"};
-            boolean hasSel = !selectedSlots.isEmpty();
-            for (int i = 0; i < 5; i++) {
+                "almightly_staff.gui.draw_backward", "almightly_staff.gui.cast_collect"};
+            for (int i = 0; i < MENU_ITEMS; i++) {
                 int y = menuY + 1 + i * MENU_ITEM_HEIGHT;
                 boolean hover = mx >= menuX && mx < menuX + MENU_WIDTH && my >= y && my < y + MENU_ITEM_HEIGHT;
-                boolean enabled = switch (i) {
-                    case 0 -> hasSel; // 移除选中格
-                    case 1 -> hasSel; // 复制选中格
-                    case 2 -> !patternClipboard.isEmpty();
-                    case 3 -> hasSel; // 重绘选中格
-                    case 4 -> draft != null && draft.pageIndex() > 0; // 真实施法采集栈
-                    default -> true;
-                };
+                boolean enabled = menuItemEnabled(i);
                 if (hover && enabled) g.fill(menuX, y, menuX + MENU_WIDTH, y + MENU_ITEM_HEIGHT, 0xAA60457B);
                 g.drawString(font, Component.translatable(keys[i]), menuX + 4, y + 3,
                     enabled ? 0xFFFFFFFF : 0x66777777);
@@ -857,74 +1455,173 @@ public class StaffLibScreen extends Screen {
         }
     }
 
-    /** 粘贴：目标格已填充 → 逐个覆盖；空格子/末尾 → 追加。 */
-    private void pastePatternAt(int targetSlot) {
-        if (draft == null || patternClipboard.isEmpty()) return;
-        pushUndo();
-        List<CompoundTag> iotas = draft.iotas();
-        if (targetSlot >= 0 && targetSlot < iotas.size()) {
-            int idx = targetSlot;
-            for (CompoundTag t : patternClipboard) {
-                CompoundTag c = t.copy();
-                if (idx < iotas.size()) iotas.set(idx, c); else iotas.add(c);
-                idx++;
+    // ==================== 复制 / 粘贴 / 剪切 ====================
+
+    private void copyPattern() {
+        patternClipboard.clear();
+        List<Integer> sorted = new ArrayList<>(selectedSlots);
+        Collections.sort(sorted);
+        for (int idx : sorted) {
+            if (idx >= 0 && idx < draftIotas.size()) {
+                CompoundTag tag = draftIotas.get(idx);
+                if (tag != null) patternClipboard.add(tag.copy()); // 所有 iota 类型均可复制
             }
-            clearSelection();
-            for (int i = targetSlot; i < idx && i < iotas.size(); i++) selectedSlots.add(i);
-            selectionAnchor = targetSlot;
-        } else {
-            int base = iotas.size();
-            for (CompoundTag t : patternClipboard) iotas.add(t.copy());
-            clearSelection();
-            for (int i = base; i < iotas.size(); i++) selectedSlots.add(i);
-            selectionAnchor = base;
         }
-        saveDraftNow(); // 粘贴即保存
     }
+
+    /**
+     * 粘贴（Q2）：有选中格 → 删掉所有选中格，在最小的选中位置插入剪贴板内容；
+     * 没有选中 → 追加到末尾。覆盖范围只由选中决定，不会顺手覆盖后面的格子（修 B18）。
+     */
+    private void pasteClipboard() {
+        if (!canEditContent() || patternClipboard.isEmpty()) return;
+        pushUndo();
+        int insertAt;
+        if (!selectedSlots.isEmpty()) {
+            List<Integer> sorted = new ArrayList<>(selectedSlots);
+            insertAt = Collections.min(sorted);
+            sorted.sort(Collections.reverseOrder());
+            for (int idx : sorted) if (idx >= 0 && idx < draftIotas.size()) draftIotas.remove(idx);
+            insertAt = Math.min(insertAt, draftIotas.size());
+        } else {
+            insertAt = draftIotas.size();
+        }
+        clearSelection();
+        int cursor = insertAt;
+        for (CompoundTag tag : patternClipboard) {
+            if (tag == null) continue;
+            draftIotas.add(cursor, tag.copy());
+            selectedSlots.add(cursor);
+            cursor++;
+        }
+        selectionAnchor = insertAt;
+        saveDraftNow();
+    }
+
+    private void cutPattern() {
+        if (!canEditContent() || selectedSlots.isEmpty()) return;
+        copyPattern();
+        removeSelectedSlots();
+    }
+
+    /** 移除所有选中格。 */
+    private void removeSelectedSlots() {
+        if (!canEditContent() || selectedSlots.isEmpty()) return;
+        pushUndo();
+        List<Integer> sorted = new ArrayList<>(selectedSlots);
+        sorted.sort(Collections.reverseOrder());
+        for (int idx : sorted) {
+            if (idx >= 0 && idx < draftIotas.size()) draftIotas.remove(idx);
+        }
+        clearSelection();
+        saveDraftNow();
+    }
+
+    /** 把选中格整块搬到 dropIndex 之前（多选也能整体移动，向右移一格不再失效 —— 修 B12）。 */
+    private void moveSelectedBlock(int dropIndex) {
+        if (!canEditContent() || selectedSlots.isEmpty()) return;
+        List<Integer> sorted = new ArrayList<>(selectedSlots);
+        Collections.sort(sorted);
+        List<CompoundTag> moved = new ArrayList<>();
+        for (int idx : sorted) if (idx >= 0 && idx < draftIotas.size()) moved.add(draftIotas.get(idx));
+        if (moved.isEmpty()) return;
+
+        int insertAt = 0;
+        for (int i = 0; i < dropIndex && i < draftIotas.size(); i++) {
+            if (!selectedSlots.contains(i)) insertAt++;
+        }
+        pushUndo();
+        List<Integer> descending = new ArrayList<>(sorted);
+        descending.sort(Collections.reverseOrder());
+        for (int idx : descending) if (idx >= 0 && idx < draftIotas.size()) draftIotas.remove(idx);
+        insertAt = Mth.clamp(insertAt, 0, draftIotas.size());
+        draftIotas.addAll(insertAt, moved);
+        clearSelection();
+        for (int i = 0; i < moved.size(); i++) selectedSlots.add(insertAt + i);
+        selectionAnchor = insertAt;
+        if (sameSequence(undoHistory.peekFirst(), draftIotas)) {
+            undoHistory.removeFirst(); // 原地放下：不留无意义的撤销记录
+            return;
+        }
+        saveDraftNow();
+    }
+
+    private void clearSelection() {
+        selectedSlots.clear();
+        selectionAnchor = -1;
+    }
+
+    // ==================== 滚动 ====================
 
     @Override
     public boolean mouseScrolled(double mx, double my, double hScroll, double vScroll) {
-        double delta = vScroll;
+        int step = (int) Math.signum(vScroll);
         if (mx >= leftX && mx < leftX + leftWidth) {
-            spellScroll = Math.max(0, spellScroll - (int) Math.signum(delta));
+            int max = Math.max(0, pages.size() - visiblePageRows());
+            spellScroll = Mth.clamp(spellScroll - step, 0, max);
             return true;
         }
         if (mx >= middleX && mx < middleX + middleWidth) {
-            catalogScroll = Math.max(0, catalogScroll - (int) Math.signum(delta));
+            int visible = Math.max(1, (listBottom - LIST_TOP) / ROW_HEIGHT);
+            int max = Math.max(0, filteredCatalog.size() - visible);
+            catalogScroll = Mth.clamp(catalogScroll - step, 0, max);
             return true;
         }
         if (mx >= rightX && mx < rightX + rightWidth) {
-            sequenceScroll = Math.max(0, sequenceScroll - (int) Math.signum(delta));
+            SeqLayout layout = computeSeqLayout();
+            int max = Math.max(0, layout.totalRows() - layout.rowsPerView());
+            sequenceScroll = Mth.clamp(sequenceScroll - step, 0, max);
             return true;
         }
         return super.mouseScrolled(mx, my, hScroll, vScroll);
     }
 
+    // ==================== 键盘 ====================
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        boolean typing = (nameField != null && nameField.isFocused()) || (searchField != null && searchField.isFocused());
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (menuOpen) { menuOpen = false; return true; }
-            onClose(); return true;
+            if (activeDragType != DRAG_NONE || pendingDragType != DRAG_NONE) { clearDrag(); return true; }
+            if (typing) { flushRename(); this.setFocused((GuiEventListener) null); return true; }
+            onClose();
+            return true;
         }
-        // 输入框聚焦时，快捷键交给输入框处理
-        boolean typing = (nameField != null && nameField.isFocused()) || (searchField != null && searchField.isFocused());
-        if (!typing) {
-            if (keyCode == GLFW.GLFW_KEY_P) { enterParseMode(); return true; }
-            if (keyCode == GLFW.GLFW_KEY_C && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) { copyPattern(); return true; }
-            if (keyCode == GLFW.GLFW_KEY_V && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) { pastePattern(); return true; }
-            if (keyCode == GLFW.GLFW_KEY_X && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) { cutPattern(); return true; }
-            if (keyCode == GLFW.GLFW_KEY_DELETE || keyCode == GLFW.GLFW_KEY_BACKSPACE) { removeSelectedSlots(); return true; }
-            if (keyCode == GLFW.GLFW_KEY_Z && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) { undoSequenceChange(); return true; }
-            if (keyCode == GLFW.GLFW_KEY_S && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0) { saveDraft(); return true; }
+        if (typing) {
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                flushRename();
+                this.setFocused((GuiEventListener) null);
+                return true;
+            }
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+        boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
+        boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        if (keyCode == GLFW.GLFW_KEY_P) { enterParseMode(); return true; }
+        if (keyCode == GLFW.GLFW_KEY_F2) { beginRename(); return true; }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_C) { copyPattern(); return true; }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_V) { pasteClipboard(); return true; }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_X) { cutPattern(); return true; }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_Z) {
+            if (shift) redoSequenceChange(); else undoSequenceChange();
+            return true;
+        }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_Y) { redoSequenceChange(); return true; }
+        if (ctrl && keyCode == GLFW.GLFW_KEY_S) { flushRename(); saveDraftNow(); return true; }
+        if (keyCode == GLFW.GLFW_KEY_DELETE || keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+            if (!selectedSlots.isEmpty()) removeSelectedSlots();
+            else if (pageListFocused) requestDelete();
+            return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    // ---- 拖拽（pendingDrag → activeDrag → finishDrag，参考 CyberStaff） ----
+    // ==================== 拖拽（pendingDrag → activeDrag → finishDrag） ====================
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
-        if (button == 0 && pendingDragType != DRAG_NONE
+        if (button == 0 && pendingDragType != DRAG_NONE && pendingDragIndex >= 0
             && Math.hypot(mx - dragStartX, my - dragStartY) >= DRAG_THRESHOLD) {
             activeDragType = pendingDragType;
             activeDragIndex = pendingDragIndex;
@@ -967,55 +1664,72 @@ public class StaffLibScreen extends Screen {
     }
 
     private void finishDrag(double mx, double my) {
-        if (draft == null) return;
-        List<CompoundTag> iotas = draft.iotas();
-        boolean inSeq = mx >= rightX && mx < rightX + rightWidth && my >= LIST_TOP && my < listBottom;
-        if (activeDragType == DRAG_CATALOG && inSeq
+        if (activeDragType == DRAG_PAGE) {
+            finishPageDrag(mx, my);
+            return;
+        }
+        boolean inSequence = mx >= rightX && mx < rightX + rightWidth && my >= LIST_TOP && my < listBottom;
+        if (activeDragType == DRAG_CATALOG && inSequence
             && activeDragIndex >= 0 && activeDragIndex < filteredCatalog.size()) {
+            if (!canEditContent()) return;
             PatternCatalogEntry entry = filteredCatalog.get(activeDragIndex);
             if (entry.pattern().signature().isBlank()) {
-                // 卓越法术：拖入时自动 ParseCode 检验
                 requestGreatSpellAutoParse(entry.pattern().actionId(), sequenceInsertionIndexAt(mx, my));
                 return;
             }
-            int target = Math.max(0, Math.min(sequenceInsertionIndexAt(mx, my), iotas.size()));
+            int target = Mth.clamp(sequenceInsertionIndexAt(mx, my), 0, draftIotas.size());
             pushUndo();
-            iotas.add(target, toNbt(new PatternIota(StaffHex.patternFor(entry.pattern()))));
+            draftIotas.add(target, StaffHex.serializeIota(new PatternIota(StaffHex.patternFor(entry.pattern()))));
             clearSelection();
-            if (target < iotas.size()) { selectedSlots.add(target); selectionAnchor = target; }
-        } else if (activeDragType == DRAG_SEQUENCE && inSeq
-            && activeDragIndex >= 0 && activeDragIndex < iotas.size()) {
-            int target = Math.max(0, Math.min(sequenceInsertionIndexAt(mx, my), iotas.size()));
-            pushUndo();
-            CompoundTag moved = iotas.remove(activeDragIndex);
-            if (target > activeDragIndex) target--;
-            target = Math.max(0, Math.min(target, iotas.size()));
-            iotas.add(target, moved);
-            clearSelection();
-            if (target < iotas.size()) { selectedSlots.add(target); selectionAnchor = target; }
+            selectedSlots.add(target);
+            selectionAnchor = target;
+            saveDraftNow();
+        } else if (activeDragType == DRAG_SEQUENCE && inSequence) {
+            moveSelectedBlock(sequenceInsertionIndexAt(mx, my));
         }
-        saveDraftNow(); // 拖放结束即保存
-    }
-
-    private int sequenceInsertionIndexAt(double mx, double my) {
-        if (draft == null) return 0;
-        int slot = sequenceSlotAt(mx, my);
-        if (slot < 0) return draft.iotas().size();
-        return Math.max(0, Math.min(slot, draft.iotas().size()));
     }
 
     private void autoScrollDuringDrag(double mx, double my) {
+        if (activeDragType == DRAG_PAGE) {
+            int visible = visiblePageRows();
+            int max = Math.max(0, pages.size() - visible);
+            if (my < LIST_TOP + 6 && my > 36) spellScroll = Mth.clamp(spellScroll - 1, 0, max);
+            else if (my > listBottom - 6 && my < listBottom + 12) spellScroll = Mth.clamp(spellScroll + 1, 0, max);
+            return;
+        }
         if (my < LIST_TOP || my >= listBottom) return;
         if (mx >= rightX && mx < rightX + rightWidth) {
-            int slotSize = SEQUENCE_SLOT_SIZE + 4;
-            if (my < LIST_TOP + slotSize) sequenceScroll = Math.max(0, sequenceScroll - 1);
-            else if (my > listBottom - slotSize) sequenceScroll++;
+            SeqLayout layout = computeSeqLayout();
+            int max = Math.max(0, layout.totalRows() - layout.rowsPerView());
+            int edge = layout.step();
+            if (my < LIST_TOP + edge) sequenceScroll = Mth.clamp(sequenceScroll - 1, 0, max);
+            else if (my > listBottom - edge) sequenceScroll = Mth.clamp(sequenceScroll + 1, 0, max);
         }
     }
 
-    /** 拖拽幽灵（简化版：跟随鼠标的半透明标记） */
-    private void drawDragFeedback(GuiGraphics g) {
-        if (activeDragType == DRAG_NONE) return;
+    /** 页拖拽幽灵：跟着鼠标的整行标签。 */
+    private void drawPageDragFeedback(GuiGraphics g) {
+        if (activeDragType != DRAG_PAGE) return;
+        ModNetworking.PageData page = findPage(activeDragIndex);
+        if (page == null) return;
+        int x = (int) dragMouseX, y = (int) dragMouseY;
+        String label = page.name().isEmpty()
+            ? Component.translatable("almightly_staff.gui.page_label", page.pageIndex()).getString()
+            : "#" + page.pageIndex() + " " + page.name();
+        PoseStack ps = g.pose();
+        ps.pushPose();
+        ps.translate(0.0F, 0.0F, 500.0F);
+        try {
+            g.fill(x - 2, y - 2, x + Math.min(leftWidth, font.width(label) + 10), y + 16, 0xDD493662);
+            g.drawString(font, trimText(label, Math.min(leftWidth, font.width(label) + 6)), x + 1, y + 2, 0xFFFFFFFF);
+        } finally {
+            ps.popPose();
+        }
+    }
+
+    /** 目录/序列拖拽幽灵。 */
+    private void drawSequenceDragFeedback(GuiGraphics g) {
+        if (activeDragType == DRAG_NONE || activeDragType == DRAG_PAGE) return;
         int x = (int) dragMouseX, y = (int) dragMouseY;
         PoseStack ps = g.pose();
         ps.pushPose();
@@ -1024,114 +1738,72 @@ public class StaffLibScreen extends Screen {
             if (activeDragType == DRAG_CATALOG && activeDragIndex >= 0 && activeDragIndex < filteredCatalog.size()) {
                 String name = filteredCatalog.get(activeDragIndex).displayName().getString();
                 g.fill(x - 2, y - 2, x + 46, y + 18, 0xAA315E5B);
-                g.drawString(font, trim(Component.literal(name), 42), x + 2, y + 2, 0xFFFFFFFF);
-            } else if (activeDragType == DRAG_SEQUENCE && draft != null
-                && activeDragIndex >= 0 && activeDragIndex < draft.iotas().size()) {
-                g.fill(x - 2, y - 2, x + 18, y + 18, 0xAA60457B);
-                g.drawCenteredString(font, "+", x + 8, y + 2, 0xFFFFFFFF);
+                g.drawString(font, trimText(name, 42), x + 2, y + 2, 0xFFFFFFFF);
+            } else if (activeDragType == DRAG_SEQUENCE && activeDragIndex >= 0 && activeDragIndex < draftIotas.size()) {
+                // 幽灵直接画出被拖的图案
+                CompoundTag tag = draftIotas.get(activeDragIndex);
+                g.fill(x - 2, y - 2, x + SEQUENCE_SLOT_SIZE + 2, y + SEQUENCE_SLOT_SIZE + 2, 0xCC20252B);
+                if (tag != null) renderSlotIota(g, tag, x, y, SEQUENCE_SLOT_SIZE);
             }
         } finally {
             ps.popPose();
         }
     }
 
-    // ---- 选择操作 ----
+    // ==================== 卓越法术（per-world） ====================
 
-    private int primarySelectedSlot() {
-        return selectedSlots.isEmpty() ? -1 : selectedSlots.iterator().next();
-    }
-
-    private void clearSelection() {
-        selectedSlots.clear();
-        selectionAnchor = -1;
-    }
-
-    private void copyPattern() {
-        if (draft == null) return;
-        patternClipboard.clear();
-        for (int idx : selectedSlots) {
-            if (idx >= 0 && idx < draft.iotas().size()) {
-                CompoundTag t = draft.iotas().get(idx);
-                if (t != null) patternClipboard.add(t.copy()); // 所有 iota 类型均可复制
-            }
-        }
-    }
-
-    private void pastePattern() {
-        pastePatternAt(primarySelectedSlot()); // Ctrl+V：覆盖选中格或追加
-    }
-
-    private void cutPattern() {
-        copyPattern();
-        removeSelectedSlots();
-    }
-
-    /** 移除所有选中格。 */
-    private void removeSelectedSlots() {
-        if (draft == null || selectedSlots.isEmpty()) return;
-        pushUndo();
-        List<Integer> sorted = new ArrayList<>(selectedSlots);
-        sorted.sort(Collections.reverseOrder());
-        for (int idx : sorted) {
-            if (idx >= 0 && idx < draft.iotas().size()) draft.iotas().remove(idx);
-        }
-        clearSelection();
-        saveDraftNow(); // 删除即保存
-    }
-
-    // ---- 卓越法术（per-world）：服务端直接调 HexParse 检查（GreatPatternUnlocker）与图案获取（PatternMapper）----
-
-    /** 卓越法术检查：发送 C2S，服务端直接调 HexParse 的检查（GreatPatternUnlocker）与图案获取（PatternMapper）。 */
     private void requestGreatSpellAutoParse(String actionId, int targetSlot) {
-        if (draft == null) return;
+        if (!canEditContent()) return;
         pendingGreatSpellAction = actionId;
         pendingGreatSpellSlot = targetSlot;
+        pendingGreatSpellPage = editingPage;
         ModNetworking.sendToServer(new ModNetworking.MsgStaffGreatSpellCheckC2S(actionId, targetSlot));
     }
 
     /** 服务端回传：已学习则返回真实签名/方向，可添加；否则拒绝。 */
+    @Override
     public void onGreatSpellCheck(String actionId, boolean usable, String signature, String startDir) {
         String pendingAction = pendingGreatSpellAction;
         int slot = pendingGreatSpellSlot;
+        int page = pendingGreatSpellPage;
         pendingGreatSpellAction = null;
         pendingGreatSpellSlot = -1;
-        if (pendingAction == null || draft == null) return;
+        pendingGreatSpellPage = 0;
+        if (pendingAction == null || !canEditContent()) return;
+        if (page != editingPage) return; // 回包时用户已切页，丢弃
         if (!usable || signature == null || signature.isEmpty() || startDir == null || startDir.isEmpty()) {
             showStatus(Component.translatable("almightly_staff.gui.great_spell_unusable").getString());
             return;
         }
-        // 学习 + 完成添加
         PatternRef learned = new PatternRef(actionId, startDir, signature);
         learnedPerWorld.put(actionId, learned);
         applyLearnedToCatalog();
         refreshFilter();
         pushUndo();
-        CompoundTag toAdd = toNbt(new PatternIota(StaffHex.patternFor(learned)));
-        List<CompoundTag> iotas = draft.iotas();
-        if (slot >= 0 && slot < iotas.size()) iotas.add(slot, toAdd);
-        else iotas.add(toAdd);
+        CompoundTag toAdd = StaffHex.serializeIota(new PatternIota(StaffHex.patternFor(learned)));
+        if (slot >= 0 && slot < draftIotas.size()) draftIotas.add(slot, toAdd);
+        else draftIotas.add(toAdd);
         showStatus(Component.translatable("almightly_staff.gui.great_spell_added").getString());
-        saveDraftNow(); // 卓越法术添加即保存
+        saveDraftNow();
     }
 
     // ==================== 真实施法采集栈 ====================
 
-    /** 打开真实施法子界面（消耗法杖媒质）；先发包清空服务端施法栈，退出时自动采集施法栈到序列。 */
+    /** 打开真实施法子界面（消耗法杖媒质）；退出时自动采集施法栈到序列。 */
     private void openCastScreen() {
-        if (draft == null || draft.pageIndex() == 0) return;
-        // 打开前先清空服务端施法栈（与后续图案包同通道，保证先处理）
+        if (!canEditContent()) return;
+        flushRename();
         ModNetworking.sendToServer(new ModNetworking.MsgStaffCastClearStackC2S());
         minecraft.setScreen(new StaffCastScreen(this, this::onStackCollected));
     }
 
     /** 施法栈回传：插入到右键打开菜单的那一格（而非末尾）并保存。 */
     public void onStackCollected(List<CompoundTag> tags) {
-        if (draft == null || tags == null || tags.isEmpty()) return;
+        if (!canEditContent() || tags == null || tags.isEmpty()) return;
         pushUndo();
-        List<CompoundTag> iotas = draft.iotas();
-        int insertAt = Math.max(0, Math.min(menuSlot, iotas.size()));
+        int insertAt = menuSlot >= 0 ? Mth.clamp(menuSlot, 0, draftIotas.size()) : draftIotas.size();
         int idx = insertAt;
-        for (CompoundTag t : tags) if (t != null) iotas.add(idx++, t.copy());
+        for (CompoundTag tag : tags) if (tag != null) draftIotas.add(idx++, tag.copy());
         clearSelection();
         for (int i = insertAt; i < idx; i++) selectedSlots.add(i);
         selectionAnchor = insertAt;
@@ -1152,11 +1824,11 @@ public class StaffLibScreen extends Screen {
     /** 将已学习的卓越法术替换目录占位，使其可直接添加。 */
     private void applyLearnedToCatalog() {
         for (int i = 0; i < catalog.size(); i++) {
-            PatternCatalogEntry e = catalog.get(i);
-            if (e.kind() == PatternCatalogEntry.Kind.PER_WORLD) {
-                PatternRef learned = learnedPerWorld.get(e.pattern().actionId());
+            PatternCatalogEntry entry = catalog.get(i);
+            if (entry.kind() == PatternCatalogEntry.Kind.PER_WORLD) {
+                PatternRef learned = learnedPerWorld.get(entry.pattern().actionId());
                 if (learned != null && !learned.signature().isBlank()) {
-                    catalog.set(i, new PatternCatalogEntry(learned, e.displayName(), PatternCatalogEntry.Kind.NORMAL));
+                    catalog.set(i, new PatternCatalogEntry(learned, entry.displayName(), PatternCatalogEntry.Kind.NORMAL));
                 }
             }
         }
@@ -1167,33 +1839,22 @@ public class StaffLibScreen extends Screen {
         statusTimer = 80;
     }
 
-    private void clampAllScrolls() {
-        spellScroll = catalogScroll = sequenceScroll = 0;
-    }
-
-    // ==================== Iota NBT helpers（1.21.1：IotaType.TYPED_CODEC） ====================
-    private static CompoundTag toNbt(Iota i) {
-        try {
-            var t = IotaType.TYPED_CODEC.encodeStart(NbtOps.INSTANCE, i).result().orElse(null);
-            return t instanceof CompoundTag ct ? ct : null;
-        } catch (Exception e) { return null; }
-    }
-    private static Iota fromNbt(CompoundTag t) {
-        try { return IotaType.TYPED_CODEC.parse(NbtOps.INSTANCE, t).result().orElse(null); }
-        catch (Exception e) { return null; }
-    }
-    private static Component displayOf(CompoundTag t) {
-        Iota i = fromNbt(t);
-        return i != null ? i.display() : IotaType.brokenIota();
-    }
-    private static int colorOf(CompoundTag t) {
-        Iota i = fromNbt(t);
-        return i != null ? i.getType().color() : 0x888888;
-    }
-    private static boolean isPatternTag(CompoundTag t) {
-        return fromNbt(t) instanceof PatternIota;
+    private void clampScrolls() {
+        spellScroll = Mth.clamp(spellScroll, 0, Math.max(0, pages.size() - visiblePageRows()));
+        int visible = Math.max(1, (listBottom - LIST_TOP) / ROW_HEIGHT);
+        catalogScroll = Mth.clamp(catalogScroll, 0, Math.max(0, filteredCatalog.size() - visible));
+        SeqLayout layout = computeSeqLayout();
+        sequenceScroll = Mth.clamp(sequenceScroll, 0, Math.max(0, layout.totalRows() - layout.rowsPerView()));
     }
 
     @Override
-    public boolean isPauseScreen() { return false; }
+    public void onClose() {
+        flushRename();
+        super.onClose();
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
 }

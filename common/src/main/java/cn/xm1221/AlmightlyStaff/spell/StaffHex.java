@@ -2,6 +2,7 @@ package cn.xm1221.AlmightlyStaff.spell;
 
 import at.petrak.hexcasting.api.casting.ActionRegistryEntry;
 import at.petrak.hexcasting.api.casting.iota.Iota;
+import at.petrak.hexcasting.api.casting.iota.IotaType;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
 import at.petrak.hexcasting.api.casting.math.HexDir;
 import at.petrak.hexcasting.api.casting.math.HexPattern;
@@ -11,14 +12,18 @@ import at.petrak.hexcasting.client.render.WorldlyPatternRenderHelpers;
 import at.petrak.hexcasting.xplat.IXplatAbstractions;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.Registry;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -147,6 +152,139 @@ public final class StaffHex {
         } catch (RuntimeException e) {
             return 0x888888;
         }
+    }
+
+    /** 1.21.1 Iota -> CompoundTag 序列化（基于 IotaType.TYPED_CODEC）。 */
+    public static CompoundTag serializeIota(Iota iota) {
+        if (iota == null) return new CompoundTag();
+        try {
+            var t = IotaType.TYPED_CODEC.encodeStart(NbtOps.INSTANCE, iota).result().orElse(null);
+            return t instanceof CompoundTag ct ? ct : new CompoundTag();
+        } catch (Exception e) {
+            return new CompoundTag();
+        }
+    }
+
+    /** 1.21.1 CompoundTag -> Iota 反序列化（基于 IotaType.TYPED_CODEC）。 */
+    public static Iota deserializeIota(CompoundTag tag) {
+        if (tag == null) return null;
+        try {
+            return IotaType.TYPED_CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 1.21.1 从序列化标签获取 Iota 显示文本。 */
+    public static Component displayOfTag(CompoundTag tag) {
+        Iota iota = deserializeIota(tag);
+        return iota != null ? iota.display() : IotaType.brokenIota();
+    }
+
+    /** 1.21.1 从序列化标签获取 Iota 类型颜色。 */
+    public static int colorOfTag(CompoundTag tag) {
+        Iota iota = deserializeIota(tag);
+        return iota != null ? iota.getType().color() : 0x888888;
+    }
+
+    /** 1.21.1 判断序列化标签是否为 PatternIota。 */
+    public static boolean isPatternTag(CompoundTag tag) {
+        if (tag != null && "hexcasting:pattern".equals(tag.getString("hexcasting:type"))) {
+            return true;
+        }
+        return deserializeIota(tag) instanceof PatternIota;
+    }
+
+    public static void clearCache() {
+        perWorldActionIds = null;
+        PATTERN_NAME_CACHE.clear();
+    }
+
+    /** 已注册图案的本地化显示名；未知/无名称键的返回 null（调用方回退 IotaType.getDisplay）。 */
+    private static final Map<String, Component> PATTERN_NAME_CACHE = new HashMap<>();
+
+    public static Component patternDisplayName(PatternRef ref) {
+        String cacheKey = (ref.actionId() == null ? "" : ref.actionId()) + "|"
+            + (ref.signature() == null ? "" : ref.signature());
+        Component cached = PATTERN_NAME_CACHE.get(cacheKey);
+        if (cached != null) return cached;
+        HexPattern pattern = patternFor(ref);
+        // 1) 数字字面量图案：按形状确定性解析（与 hexmod SpecialHandlerNumberLiteral 同款算法，
+        //    不依赖 env/注册表，客户端可靠）。数字不占用动作注册表 id，所以必须走形状匹配。
+        try {
+            Component num = numberLiteralName(pattern);
+            if (num != null) {
+                PATTERN_NAME_CACHE.put(cacheKey, num);
+                return num;
+            }
+        } catch (Exception ignored) { }
+        // 2) 其它 special handler（面具等，按形状匹配兜底）
+        try {
+            var registry = IXplatAbstractions.INSTANCE.getSpecialHandlerRegistry();
+            for (var key : registry.registryKeySet()) {
+                var factory = registry.get(key);
+                if (factory == null) continue;
+                try {
+                    var handler = factory.tryMatch(pattern, null);
+                    if (handler != null) {
+                        Component name = handler.getName();
+                        PATTERN_NAME_CACHE.put(cacheKey, name);
+                        return name;
+                    }
+                } catch (Exception ignored) { }
+            }
+        } catch (Exception ignored) { }
+        String id = ref.actionId();
+        if (id == null || id.isEmpty()) return null;
+        // 3) 元图案（escape/undo/括号）：用本项目自定义译名
+        String metaKey = metaKey(id);
+        if (metaKey != null && net.minecraft.locale.Language.getInstance().has(metaKey)) {
+            Component name = Component.translatable(metaKey);
+            PATTERN_NAME_CACHE.put(cacheKey, name);
+            return name;
+        }
+        // 4) 普通注册动作官方 i18n 键
+        String actKey = "hexcasting.action." + id;
+        if (net.minecraft.locale.Language.getInstance().has(actKey)) {
+            Component name = Component.translatable(actKey);
+            PATTERN_NAME_CACHE.put(cacheKey, name);
+            return name;
+        }
+        return null;
+    }
+
+    /** 数字之精思（数字字面量）图案的显示名。算法照搬 hexmod SpecialHandlerNumberLiteral：
+     *  签名以 aqaa（正）或 dedd（负）开头，后续 w+1 q+5 e+10 a*2 d/2 s 跳过；返回 null 表示非数字图案。 */
+    private static Component numberLiteralName(HexPattern pat) {
+        String sig = pat.getSignature().toAnglesString();
+        if (sig == null || !(sig.startsWith("aqaa") || sig.startsWith("dedd"))) return null;
+        boolean negate = sig.startsWith("dedd");
+        double acc = 0.0;
+        for (int i = 4; i < sig.length(); i++) {
+            switch (sig.charAt(i)) {
+                case 'w' -> acc += 1;
+                case 'q' -> acc += 5;
+                case 'e' -> acc += 10;
+                case 'a' -> acc *= 2;
+                case 'd' -> acc /= 2;
+                case 's' -> { }
+                default -> { return null; }
+            }
+        }
+        if (negate) acc = -acc;
+        String fmt = acc == Math.rint(acc) ? String.valueOf((long) acc) : String.valueOf(acc);
+        return Component.translatable("hexcasting.special.hexcasting:number", fmt)
+            .withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE);
+    }
+
+    private static String metaKey(String actionId) {
+        return switch (actionId) {
+            case "hexcasting:escape" -> "almightly_staff.meta.escape";
+            case "hexcasting:open_paren" -> "almightly_staff.meta.open_paren";
+            case "hexcasting:close_paren" -> "almightly_staff.meta.close_paren";
+            case "hexcasting:undo" -> "almightly_staff.meta.undo";
+            default -> null;
+        };
     }
 
     private static boolean isMeta(PatternRef ref) {

@@ -30,11 +30,14 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: Run unit tests
+        run: ./gradlew --no-daemon :common:test
+
       - name: Compile common + both loaders
         run: ./gradlew --no-daemon :common:classes :fabric:classes :neoforge:classes
 
       - name: Build mod jars
-        run: ./gradlew --no-daemon :fabric:build :neoforge:build -x test
+        run: ./gradlew --no-daemon :fabric:build :neoforge:build
 
       - name: Upload jars
         uses: actions/upload-artifact@v4

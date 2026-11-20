@@ -32,3 +32,31 @@ compileKotlin {
         freeCompilerArgs += "-Xjvm-default=all"
     }
 }
+
+// 单元测试（D3）：JUnit 5。测试类大量使用 Minecraft/Hex 类型，所以测试源集
+// 继承主源集的 classpath，并且也要经过 Loom 的 named 映射。
+loom {
+    runs {
+        // 测试不需要 run config，这里只是确保 Loom 处理 test source set
+    }
+}
+
+sourceSets {
+    test {
+        java.srcDirs = ['src/test/java']
+        resources.srcDirs = ['src/test/resources']
+    }
+}
+
+dependencies {
+    testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    testLogging {
+        events "failed", "skipped"
+        exceptionFormat "full"
+    }
+}

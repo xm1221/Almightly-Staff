@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " a ",
+    "aba",
+    " a "
+  ],
+  "key": {
+    "a": {
+      "item": "hexcasting:amethyst_dust"
+    },
+    "b": {
+      "item": "hexcasting:battery"
+    }
+  },
+  "result": {
+    "id": "almightly_staff:homeless_bottle",
+    "count": 1
+  }
+}

@@ -1,0 +1,27 @@
+# push main 后通知 MieBooks 聚合站重新构建+部署（repository_dispatch）
+# 需要 secret: MIEBOOKS_DISPATCH_TOKEN = GitHub PAT（对 xm1221/MieBooks 有 Contents 写权限）
+name: Notify MieBooks
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch to MieBooks
+        env:
+          TOKEN: ${{ secrets.MIEBOOKS_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::MIEBOOKS_DISPATCH_TOKEN not set; skipping dispatch."
+            exit 0
+          fi
+          curl -sS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/xm1221/MieBooks/dispatches \
+            -d '{"event_type":"book-update","client_payload":{"repo":"'"${{ github.repository }}"'"}}'

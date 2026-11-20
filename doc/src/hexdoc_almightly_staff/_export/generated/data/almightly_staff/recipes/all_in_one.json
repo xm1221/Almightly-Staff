@@ -1,0 +1,26 @@
+{
+    "type": "minecraft:crafting_shaped",
+    "pattern": [
+        " ab",
+        " ca",
+        "d  "
+    ],
+    "key":{
+        "a": {
+            "item": "hexcasting:thought_knot"
+        },
+        "b": {
+            "item": "hexcasting:artifact"
+        },
+        "c": {
+            "item": "minecraft:book"
+        },
+        "d": {
+            "item": "hexcasting:staff/edified"
+        }
+    },
+    "result":{
+        "item": "almightly_staff:all_in_one",
+        "count": 1
+    }
+}

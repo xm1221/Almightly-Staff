@@ -62,4 +62,32 @@ class DockLayoutTest {
         assertTrue(bottom.bounds().h() >= 0);
         assertSame(bottom, split.findLeaf("bottom"));
     }
+
+    @Test
+    void dropZonesSplitSlotAndPruneEmptyLeaves() {
+        DockNode.LeafNode main = new DockNode.LeafNode("slot_main", java.util.List.of("iota_text"));
+        Bounds area = new Bounds(0, 20, 600, 360);
+        main.layout(area);
+
+        DockNode.DropTarget leftDrop = DockNode.computeDropTarget(main, 12, 200, 20);
+        assertNotNull(leftDrop);
+        assertEquals(DockNode.DropZone.LEFT, leftDrop.zone());
+
+        DockNode tree = DockNode.dockWindow(main, "hex_grid", leftDrop.slot(), leftDrop.zone());
+        tree.layout(area);
+        assertNotNull(tree.findLeafContainingWindow("hex_grid"));
+        assertNotNull(tree.findLeafContainingWindow("iota_text"));
+
+        // 停靠到中心成为同一槽位 Tab
+        DockNode.LeafNode gridSlot = tree.findLeafContainingWindow("hex_grid");
+        tree = DockNode.dockWindow(tree, "hex_parse", gridSlot, DockNode.DropZone.CENTER);
+        assertEquals(java.util.List.of("hex_grid", "hex_parse"), gridSlot.windows());
+
+        // 移除两个窗口后空槽自动剪枝，右侧主槽自动占满
+        tree = DockNode.removeWindow(tree, "hex_grid");
+        tree = DockNode.removeWindow(tree, "hex_parse");
+        tree.layout(area);
+        assertTrue(tree instanceof DockNode.LeafNode);
+        assertEquals(area, tree.bounds());
+    }
 }

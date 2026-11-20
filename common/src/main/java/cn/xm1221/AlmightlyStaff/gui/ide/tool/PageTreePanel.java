@@ -27,19 +27,19 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
 
 /**
- * 左侧虚拟书页树（文件夹折叠/展开、单击选中、双击开 Tab、拖拽跨目录或重排、行内重命名、右键菜单）。
+ * 书页树面板：单击选中行，双击打开/聚焦；顶部提供新建/复制/删除/新建文件夹图标按钮与提示；
+ * 笔记与外部界面默认折叠以突出法术页。
  */
 public final class PageTreePanel implements IdeComponent {
     public record NoteEntry(String id, String title, String content, boolean readOnly) {
     }
 
     public interface Callbacks {
-        void onOpenSpellPage(int pageIndex, boolean split);
+        void onOpenSpellPage(int pageIndex);
 
-        void onOpenNote(NoteEntry note, boolean split);
+        void onOpenNote(NoteEntry note);
 
         void onOpenExternalPatchouli();
 
@@ -66,7 +66,7 @@ public final class PageTreePanel implements IdeComponent {
 
     private static final int HEADER_H = 20;
     private static final int ROW_H = 17;
-    private static final long DOUBLE_CLICK_MS = 280L;
+    private static final long DOUBLE_CLICK_MS = 320L;
 
     private final IdeSession session;
     private final FocusManager focusManager;
@@ -77,14 +77,13 @@ public final class PageTreePanel implements IdeComponent {
     private int scroll = 0;
     private int selectedPageIndex = -1;
     private String selectedRowId = "";
-    private boolean notesExpanded = true;
-    private boolean externalExpanded = true;
+    private boolean notesExpanded = false;     // 默认折叠，不压过法术页
+    private boolean externalExpanded = false;  // 默认折叠
     private boolean uncategorizedExpanded = true;
 
     private long lastClickMs;
     private String lastClickId = "";
 
-    // 行内重命名
     private boolean renaming = false;
     private boolean renameFolder = false;
     private String renameTargetId = "";
@@ -92,13 +91,11 @@ public final class PageTreePanel implements IdeComponent {
     private String renameText = "";
     private final TextFieldHelper renameHelper;
 
-    // 拖拽
     private boolean pendingDrag;
     private boolean activeDrag;
     private int dragPageIndex = -1;
     private double dragStartX, dragStartY, dragMouseX, dragMouseY;
 
-    // 删除两步确认
     private int deleteConfirmPage = -1;
     private int deleteConfirmTicks = 0;
 
@@ -143,23 +140,17 @@ public final class PageTreePanel implements IdeComponent {
             }
         }
 
-        // 未分类书页
         List<SpellDocument> uncategorized = new ArrayList<>();
         for (SpellDocument doc : session.documents()) {
-            if (!assigned.contains(doc.pageIndex())) {
-                uncategorized.add(doc);
-            }
+            if (!assigned.contains(doc.pageIndex())) uncategorized.add(doc);
         }
         rows.add(new TreeRow(RowKind.FOLDER, "folder:__root__", 0,
             Component.translatable("almightly_staff.ide.tree_uncategorized").getString(),
             !uncategorizedExpanded, false, false, false, 0, null));
         if (uncategorizedExpanded) {
-            for (SpellDocument doc : uncategorized) {
-                rows.add(pageRow(doc, 1));
-            }
+            for (SpellDocument doc : uncategorized) rows.add(pageRow(doc, 1));
         }
 
-        // 笔记分组
         List<NoteEntry> notes = callbacks.collectNotes();
         rows.add(new TreeRow(RowKind.NOTES_ROOT, "notes_root", 0,
             Component.translatable("almightly_staff.ide.tree_notes").getString(),
@@ -171,7 +162,6 @@ public final class PageTreePanel implements IdeComponent {
             }
         }
 
-        // 外部 GUI
         if (Platform.isModLoaded("patchouli")) {
             rows.add(new TreeRow(RowKind.EXTERNAL_ROOT, "ext_root", 0,
                 Component.translatable("almightly_staff.ide.tree_external").getString(),
@@ -222,18 +212,18 @@ public final class PageTreePanel implements IdeComponent {
         if (bounds.isEmpty()) return;
         rebuildTree();
         Font font = Minecraft.getInstance().font;
-        g.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BG_PANEL);
-        g.fill(bounds.right() - 1, bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.PANEL);
 
-        // Header + buttons [+页] [+夹]
         Bounds hb = headerBounds();
-        g.fill(hb.x(), hb.y(), hb.right() - 1, hb.bottom(), IdeTheme.BG_ELEVATED);
-        g.fill(hb.x(), hb.bottom() - 1, hb.right() - 1, hb.bottom(), IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, hb, IdeTheme.NineSlice.HEADER);
         try (IdeScissor.Scope sc = IdeScissor.push(g, hb)) {
             IdeTheme.drawClippedString(g, font, Component.translatable("almightly_staff.ide.tree_title"),
-                hb.x() + 6, hb.y() + 6, Math.max(10, hb.w() - 56), IdeTheme.TEXT_MUTED);
-            drawSmallBtn(g, font, hb.right() - 50, hb.y() + 3, 22, 14, "+", mouseX, mouseY);
-            drawSmallBtn(g, font, hb.right() - 26, hb.y() + 3, 22, 14, "D+", mouseX, mouseY);
+                hb.x() + 6, hb.y() + 6, Math.max(10, hb.w() - 78), IdeTheme.TEXT_MUTED);
+            drawHeaderIconBtn(g, hb.right() - 70, hb.y() + 3, IdeTheme.Icon.PLUS_ICON, false, mouseX, mouseY);
+            drawHeaderIconBtn(g, hb.right() - 53, hb.y() + 3, IdeTheme.Icon.COPY_ICON, false, mouseX, mouseY);
+            drawHeaderIconBtn(g, hb.right() - 36, hb.y() + 3, IdeTheme.Icon.TRASH_ICON,
+                deleteConfirmPage > 0 && deleteConfirmTicks > 0, mouseX, mouseY);
+            drawHeaderIconBtn(g, hb.right() - 19, hb.y() + 3, IdeTheme.Icon.FOLDER_CLOSED, false, mouseX, mouseY);
         }
 
         Bounds lb = listBounds();
@@ -251,11 +241,8 @@ public final class PageTreePanel implements IdeComponent {
                 boolean selected = r.id().equals(selectedRowId)
                     || (r.kind() == RowKind.PAGE && r.pageIndex() == selectedPageIndex);
                 boolean hover = mouseX >= lb.x() && mouseX < contentRight && mouseY >= y && mouseY < y + ROW_H;
-                if (selected) {
-                    g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_ACTIVE);
-                } else if (hover) {
-                    g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_HOVER);
-                }
+                if (selected) g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_ACTIVE);
+                else if (hover) g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_HOVER);
 
                 int ix = lb.x() + 5 + r.indent() * 10;
                 if (r.kind() == RowKind.FOLDER || r.kind() == RowKind.NOTES_ROOT || r.kind() == RowKind.EXTERNAL_ROOT) {
@@ -282,10 +269,8 @@ public final class PageTreePanel implements IdeComponent {
                     ix += 10;
                 }
 
-                // 行内重命名输入条
                 if (renaming && r.id().equals(renameTargetId)) {
-                    g.fill(ix, y + 1, contentRight - 3, y + ROW_H - 2, IdeTheme.BG_ROOT);
-                    IdeTheme.drawBorder(g, ix, y + 1, Math.max(12, contentRight - 3 - ix), ROW_H - 3, IdeTheme.ACCENT);
+                    IdeTheme.drawNineSlice(g, ix, y + 1, Math.max(12, contentRight - 3 - ix), ROW_H - 3, IdeTheme.NineSlice.INPUT);
                     g.drawString(font, renameText, ix + 3, y + 4, IdeTheme.TEXT_MAIN, false);
                     int cur = Math.min(renameHelper.getCursorPos(), renameText.length());
                     int cx = ix + 3 + font.width(renameText.substring(0, cur));
@@ -302,7 +287,6 @@ public final class PageTreePanel implements IdeComponent {
                     ix, y + 4, col, false);
             }
 
-            // 拖拽目标提示线
             if (activeDrag) {
                 int hoverIdx = rowIndexAt(dragMouseX, dragMouseY);
                 if (hoverIdx >= 0 && hoverIdx < rows.size()) {
@@ -323,42 +307,62 @@ public final class PageTreePanel implements IdeComponent {
 
     @Override
     public void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        if (!activeDrag) return;
         Font font = Minecraft.getInstance().font;
-        PoseStack ps = g.pose();
-        ps.pushPose();
-        ps.translate(0.0F, 0.0F, 520.0F);
-        try {
-            int x = (int) dragMouseX;
-            int y = (int) dragMouseY;
-            String txt = "#" + dragPageIndex;
-            g.fill(x, y, x + 52, y + 15, IdeTheme.BG_ACTIVE);
-            g.drawString(font, txt, x + 5, y + 3, 0xFFFFFFFF, false);
-        } finally {
-            ps.popPose();
+        if (activeDrag) {
+            PoseStack ps = g.pose();
+            ps.pushPose();
+            ps.translate(0.0F, 0.0F, 520.0F);
+            try {
+                IdeTheme.drawNineSlice(g, (int) dragMouseX, (int) dragMouseY, 50, 15, IdeTheme.NineSlice.BTN_ACTIVE);
+                g.drawString(font, "#" + dragPageIndex, (int) dragMouseX + 5, (int) dragMouseY + 3, 0xFFFFFFFF, false);
+            } finally {
+                ps.popPose();
+            }
+            return;
+        }
+        Bounds hb = headerBounds();
+        if (hb.contains(mouseX, mouseY) && mouseY >= hb.y() + 3 && mouseY < hb.y() + 17) {
+            if (mouseX >= hb.right() - 70 && mouseX < hb.right() - 56) {
+                g.renderTooltip(font, Component.translatable("almightly_staff.gui.new"), mouseX, mouseY);
+            } else if (mouseX >= hb.right() - 53 && mouseX < hb.right() - 39) {
+                g.renderTooltip(font, Component.translatable("almightly_staff.gui.copy"), mouseX, mouseY);
+            } else if (mouseX >= hb.right() - 36 && mouseX < hb.right() - 22) {
+                g.renderTooltip(font, Component.translatable(
+                    deleteConfirmPage > 0 && deleteConfirmTicks > 0
+                        ? "almightly_staff.gui.confirm_delete" : "almightly_staff.gui.delete"), mouseX, mouseY);
+            } else if (mouseX >= hb.right() - 19 && mouseX < hb.right() - 5) {
+                g.renderTooltip(font, Component.translatable("almightly_staff.ide.new_folder_btn"), mouseX, mouseY);
+            }
         }
     }
 
-    private static void drawSmallBtn(GuiGraphics g, Font font, int x, int y, int w, int h, String txt, int mx, int my) {
-        boolean hov = mx >= x && mx < x + w && my >= y && my < y + h;
-        g.fill(x, y, x + w, y + h, hov ? IdeTheme.BG_HOVER : IdeTheme.BG_PANEL);
-        IdeTheme.drawBorder(g, x, y, w, h, IdeTheme.BORDER_STRONG);
-        g.drawCenteredString(font, txt, x + w / 2, y + 3, IdeTheme.TEXT_MAIN);
+    private static void drawHeaderIconBtn(GuiGraphics g, int x, int y, IdeTheme.Icon icon, boolean danger, int mx, int my) {
+        boolean hov = mx >= x && mx < x + 14 && my >= y && my < y + 14;
+        IdeTheme.drawNineSlice(g, x, y, 14, 14, danger ? IdeTheme.NineSlice.BTN_ACTIVE
+            : (hov ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL));
+        IdeTheme.drawIcon(g, icon, x + 3, y + 3, danger ? IdeTheme.RED_ERROR : IdeTheme.TEXT_MAIN);
     }
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (!bounds.contains(mx, my)) return false;
-        if (renaming) {
-            commitRename();
-        }
+        if (renaming) commitRename();
+
         Bounds hb = headerBounds();
         if (hb.contains(mx, my) && button == 0) {
-            if (mx >= hb.right() - 50 && mx < hb.right() - 28) {
+            if (mx >= hb.right() - 70 && mx < hb.right() - 56) {
                 session.createNewPage();
                 return true;
             }
-            if (mx >= hb.right() - 26 && mx < hb.right() - 4) {
+            if (mx >= hb.right() - 53 && mx < hb.right() - 39 && selectedPageIndex > 0) {
+                duplicateWithLocalizedSuffix(selectedPageIndex);
+                return true;
+            }
+            if (mx >= hb.right() - 36 && mx < hb.right() - 22 && selectedPageIndex > 0) {
+                requestDelete(selectedPageIndex);
+                return true;
+            }
+            if (mx >= hb.right() - 19 && mx < hb.right() - 5) {
                 createFolder();
                 return true;
             }
@@ -384,24 +388,24 @@ public final class PageTreePanel implements IdeComponent {
                 case EXTERNAL_ROOT -> externalExpanded = !externalExpanded;
                 case PAGE -> {
                     selectedPageIndex = row.pageIndex();
+                    // 单击仅选中，双击打开/聚焦 Tab
                     if (dbl) {
-                        callbacks.onOpenSpellPage(row.pageIndex(), false);
-                    } else {
-                        callbacks.onOpenSpellPage(row.pageIndex(), false);
-                        if (!row.sealed()) {
-                            pendingDrag = true;
-                            dragPageIndex = row.pageIndex();
-                            dragStartX = mx;
-                            dragStartY = my;
-                            dragMouseX = mx;
-                            dragMouseY = my;
-                        }
+                        callbacks.onOpenSpellPage(row.pageIndex());
+                    } else if (!row.sealed()) {
+                        pendingDrag = true;
+                        dragPageIndex = row.pageIndex();
+                        dragStartX = mx;
+                        dragStartY = my;
+                        dragMouseX = mx;
+                        dragMouseY = my;
                     }
                 }
                 case NOTE -> {
-                    if (row.note() != null) callbacks.onOpenNote(row.note(), false);
+                    if (dbl && row.note() != null) callbacks.onOpenNote(row.note());
                 }
-                case EXTERNAL_ITEM -> callbacks.onOpenExternalPatchouli();
+                case EXTERNAL_ITEM -> {
+                    if (dbl) callbacks.onOpenExternalPatchouli();
+                }
             }
             return true;
         }
@@ -414,13 +418,22 @@ public final class PageTreePanel implements IdeComponent {
             } else if (row.kind() == RowKind.NOTE && row.note() != null) {
                 NoteEntry n = row.note();
                 callbacks.openContextMenu((int) mx, (int) my, List.of(
-                    new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.open_in_split"),
-                        true, () -> callbacks.onOpenNote(n, true))
+                    new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.open_note"),
+                        true, () -> callbacks.onOpenNote(n))
                 ));
             }
             return true;
         }
         return true;
+    }
+
+    private void duplicateWithLocalizedSuffix(int page) {
+        SpellDocument doc = session.document(page);
+        if (doc == null) return;
+        String suffix = Component.translatable("almightly_staff.gui.copy_suffix").getString();
+        String base = doc.name().trim();
+        String copyName = base.isEmpty() ? suffix.trim() : base + suffix;
+        session.duplicatePage(page, copyName);
     }
 
     private void toggleFolder(String id) {
@@ -453,21 +466,18 @@ public final class PageTreePanel implements IdeComponent {
         String delKey = (deleteConfirmPage == page && deleteConfirmTicks > 0)
             ? "almightly_staff.gui.confirm_delete" : "almightly_staff.gui.delete";
         List<ContextMenuOverlay.MenuItem> items = List.of(
-            new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.open_in_split"),
-                true, () -> callbacks.onOpenSpellPage(page, true)),
+            new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.open_page"),
+                true, () -> callbacks.onOpenSpellPage(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.set_cast_page"),
                 true, () -> session.selectCastPage(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.rename"),
                 true, () -> beginPageRename(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.gui.copy"),
-                true, () -> {
-                    SpellDocument doc = session.document(page);
-                    session.duplicatePage(page, doc == null ? "" : doc.name() + " (copy)");
-                }),
+                true, () -> duplicateWithLocalizedSuffix(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.copy_hexparse"),
                 true, () -> callbacks.onCopyPageAsHexParse(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.export_hex"),
-                true, () -> exportPageToFile(page)),
+                true, () -> exportPageToHexParseFile(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable(delKey),
                 !sealed, () -> requestDelete(page))
         );
@@ -490,6 +500,11 @@ public final class PageTreePanel implements IdeComponent {
     }
 
     private void requestDelete(int page) {
+        SpellDocument doc = session.document(page);
+        if (doc != null && doc.isSealed()) {
+            session.toast().showError(Component.translatable("almightly_staff.gui.page_sealed").getString());
+            return;
+        }
         if (deleteConfirmPage == page && deleteConfirmTicks > 0) {
             deleteConfirmPage = -1;
             deleteConfirmTicks = 0;
@@ -501,23 +516,21 @@ public final class PageTreePanel implements IdeComponent {
         }
     }
 
-    private void exportPageToFile(int page) {
+    private void exportPageToHexParseFile(int page) {
         SpellDocument doc = session.document(page);
         if (doc == null) return;
-        try {
-            Path dir = Platform.getConfigFolder().resolve("almightly_staff").resolve("exports");
-            Files.createDirectories(dir);
-            String safeName = (doc.name().isEmpty() ? "page_" + page : doc.name()).replaceAll("[^a-zA-Z0-9._-]", "_");
-            Path file = dir.resolve(safeName + ".hex");
-            StringBuilder sb = new StringBuilder();
-            for (var tag : doc.iotasView()) {
-                sb.append(tag.toString()).append('\n');
+        session.requestCodeForAction(page, code -> {
+            try {
+                Path dir = Platform.getConfigFolder().resolve("almightly_staff").resolve("exports");
+                Files.createDirectories(dir);
+                String safeName = (doc.name().isEmpty() ? "page_" + page : doc.name()).replaceAll("[^a-zA-Z0-9._-]", "_");
+                Path file = dir.resolve(safeName + ".hexparse");
+                Files.writeString(file, code, StandardCharsets.UTF_8);
+                session.toast().show(Component.translatable("almightly_staff.ide.exported", file.getFileName().toString()).getString());
+            } catch (Exception e) {
+                session.toast().showError(e.getMessage());
             }
-            Files.writeString(file, sb.toString(), StandardCharsets.UTF_8);
-            session.toast().show(Component.translatable("almightly_staff.ide.exported", file.getFileName().toString()).getString());
-        } catch (Exception e) {
-            session.toast().showError(e.getMessage());
-        }
+        });
     }
 
     public void beginPageRename(int page) {
@@ -628,10 +641,7 @@ public final class PageTreePanel implements IdeComponent {
             return true;
         }
         if ((keyCode == GLFW.GLFW_KEY_DELETE || keyCode == GLFW.GLFW_KEY_BACKSPACE) && selectedPageIndex > 0) {
-            SpellDocument doc = session.document(selectedPageIndex);
-            if (doc != null && !doc.isSealed()) {
-                requestDelete(selectedPageIndex);
-            }
+            requestDelete(selectedPageIndex);
             return true;
         }
         return false;
@@ -639,19 +649,14 @@ public final class PageTreePanel implements IdeComponent {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (renaming) {
-            return renameHelper.charTyped(codePoint);
-        }
-        return false;
+        return renaming && renameHelper.charTyped(codePoint);
     }
 
     @Override
     public void tick() {
         if (deleteConfirmTicks > 0) {
             deleteConfirmTicks--;
-            if (deleteConfirmTicks == 0) {
-                deleteConfirmPage = -1;
-            }
+            if (deleteConfirmTicks == 0) deleteConfirmPage = -1;
         }
     }
 

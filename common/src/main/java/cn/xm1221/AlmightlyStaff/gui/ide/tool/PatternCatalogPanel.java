@@ -100,13 +100,27 @@ public final class PatternCatalogPanel implements IdeComponent {
         if (selectedIndex >= filtered.size()) selectedIndex = -1;
     }
 
+    public void focusAction(String actionId) {
+        if (actionId == null || actionId.isEmpty()) return;
+        query = "";
+        refreshFilter();
+        for (int i = 0; i < filtered.size(); i++) {
+            if (actionId.equals(filtered.get(i).pattern().actionId())) {
+                selectedIndex = i;
+                int visible = Math.max(1, listBounds().h() / ROW_H);
+                if (i < scroll) scroll = i;
+                else if (i >= scroll + visible) scroll = i - visible + 1;
+                return;
+            }
+        }
+    }
+
     private Bounds searchBounds() {
-        return new Bounds(bounds.x() + 4, bounds.y() + HEADER_H + 2, Math.max(0, bounds.w() - 8), SEARCH_H);
+        return new Bounds(bounds.x() + 4, bounds.y() + 4, Math.max(0, bounds.w() - 8), SEARCH_H);
     }
 
     private Bounds listBounds() {
-        int top = HEADER_H + SEARCH_H + 6;
-        return bounds.inset(0, top, 0, 2);
+        return bounds.inset(0, SEARCH_H + 8, 0, 2);
     }
 
     @Override
@@ -130,20 +144,13 @@ public final class PatternCatalogPanel implements IdeComponent {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         if (bounds.isEmpty()) return;
         Font font = Minecraft.getInstance().font;
-        g.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BG_PANEL);
-        g.fill(bounds.x(), bounds.y(), bounds.x() + 1, bounds.bottom(), IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.PANEL);
 
-        // Header
-        g.fill(bounds.x() + 1, bounds.y(), bounds.right(), bounds.y() + HEADER_H, IdeTheme.BG_ELEVATED);
-        g.fill(bounds.x() + 1, bounds.y() + HEADER_H - 1, bounds.right(), bounds.y() + HEADER_H, IdeTheme.BORDER);
-        IdeTheme.drawClippedString(g, font, Component.translatable("almightly_staff.gui.pattern_library"),
-            bounds.x() + 6, bounds.y() + 6, bounds.w() - 12, IdeTheme.TEXT_MUTED);
-
-        // Search box
-        Bounds sb = searchBounds();
+        // Search box (紧凑顶置搜索条)
+        Bounds sb = new Bounds(bounds.x() + 4, bounds.y() + 4, Math.max(0, bounds.w() - 8), SEARCH_H);
         boolean focused = focusManager.isFocused(this);
-        g.fill(sb.x(), sb.y(), sb.right(), sb.bottom(), IdeTheme.BG_ROOT);
-        IdeTheme.drawBorder(g, sb, focused ? IdeTheme.ACCENT : IdeTheme.BORDER_STRONG);
+        IdeTheme.drawNineSlice(g, sb, IdeTheme.NineSlice.INPUT);
+        if (focused) IdeTheme.drawBorder(g, sb, IdeTheme.ACCENT);
         try (IdeScissor.Scope sc = IdeScissor.push(g, sb.inset(2))) {
             String shown = query.isEmpty() && !focused
                 ? Component.translatable("almightly_staff.gui.search").getString()
@@ -158,7 +165,7 @@ public final class PatternCatalogPanel implements IdeComponent {
         }
 
         // List
-        Bounds lb = listBounds();
+        Bounds lb = bounds.inset(0, SEARCH_H + 8, 0, 2);
         if (lb.isEmpty()) return;
         int visible = Math.max(1, lb.h() / ROW_H);
         int maxScroll = Math.max(0, filtered.size() - visible);
@@ -230,8 +237,7 @@ public final class PatternCatalogPanel implements IdeComponent {
             int ty = my + 12;
             if (tx + tooltipW > sw) tx = Math.max(4, mx - tooltipW - 12);
             if (ty + tooltipH > sh) ty = Math.max(4, sh - tooltipH - 6);
-            g.fill(tx, ty, tx + tooltipW, ty + tooltipH, 0xF018111F);
-            IdeTheme.drawBorder(g, tx, ty, tooltipW, tooltipH, IdeTheme.ACCENT);
+            IdeTheme.drawNineSlice(g, tx, ty, tooltipW, tooltipH, IdeTheme.NineSlice.POPUP);
             if (!pattern.signature().isBlank()) {
                 StaffHex.renderPattern(pattern, ps, tx + 6, ty + 6, previewSize);
             }

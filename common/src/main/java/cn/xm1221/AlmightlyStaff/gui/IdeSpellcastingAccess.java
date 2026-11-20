@@ -25,4 +25,6 @@ public interface IdeSpellcastingAccess {
     void setHexSizeOverride$ide(float hexSize);
     void setCoordsOffsetOverride$ide(@Nullable Vec2 offset);
     void recalcDisplays$ide();
+    boolean isDrawing$ide();
+    void cancelStroke$ide();
 }

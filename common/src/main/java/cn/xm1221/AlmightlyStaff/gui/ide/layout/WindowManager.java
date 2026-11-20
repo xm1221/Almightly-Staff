@@ -1,5 +1,6 @@
 package cn.xm1221.AlmightlyStaff.gui.ide.layout;
 
+import cn.xm1221.AlmightlyStaff.gui.ide.core.Bounds;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -9,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Z-order 浮动窗口管理器：从底向上渲染，从顶向下命中测试，点击自动置顶。
+ * Z-order 浮动窗口管理器：底到顶渲染、顶到底命中、点击置顶、贴边吸附与工作区钳位。
  */
 public final class WindowManager {
     private final List<FloatingWindow> windows = new ArrayList<>();
@@ -23,6 +24,14 @@ public final class WindowManager {
     @Nullable
     public FloatingWindow activeWindow() {
         return activeWindow;
+    }
+
+    @Nullable
+    public FloatingWindow find(String id) {
+        for (FloatingWindow w : windows) {
+            if (w.id().equals(id)) return w;
+        }
+        return null;
     }
 
     public void add(FloatingWindow window) {
@@ -50,9 +59,13 @@ public final class WindowManager {
         activeWindow = null;
     }
 
-    public void clampAll(int screenW, int screenH, int minTop) {
+    public void clampAll(Bounds workArea) {
         for (FloatingWindow w : windows) {
-            w.setBounds(w.bounds(), screenW, screenH, minTop);
+            if (w.isMaximized()) {
+                w.setBounds(workArea, workArea.right(), workArea.bottom(), workArea.y());
+            } else {
+                w.setBounds(w.bounds(), workArea.right(), workArea.bottom(), workArea.y());
+            }
         }
     }
 
@@ -76,22 +89,21 @@ public final class WindowManager {
         }
     }
 
-    public boolean mouseClicked(double mx, double my, int button) {
+    public boolean mouseClicked(double mx, double my, int button, Bounds workArea) {
         for (int i = windows.size() - 1; i >= 0; i--) {
             FloatingWindow w = windows.get(i);
             if (w.contains(mx, my)) {
                 bringToFront(w);
-                return w.mouseClicked(mx, my, button);
+                return w.mouseClicked(mx, my, button, workArea);
             }
         }
         activeWindow = null;
         return false;
     }
 
-    public boolean mouseDragged(double mx, double my, int button, double dx, double dy,
-                                int screenW, int screenH, int minTop) {
+    public boolean mouseDragged(double mx, double my, int button, double dx, double dy, Bounds workArea) {
         if (activeWindow != null) {
-            return activeWindow.mouseDragged(mx, my, button, dx, dy, screenW, screenH, minTop);
+            return activeWindow.mouseDragged(mx, my, button, dx, dy, workArea, windows);
         }
         return false;
     }

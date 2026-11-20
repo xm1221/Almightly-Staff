@@ -56,8 +56,7 @@ public final class ContextMenuOverlay {
         ps.translate(0.0F, 0.0F, 700.0F);
         try {
             g.fill(x - 1, y - 1, x + width + 1, y + height + 1, 0xEE080A0D);
-            g.fill(x, y, x + width, y + height, IdeTheme.BG_ELEVATED);
-            IdeTheme.drawBorder(g, x, y, width, height, IdeTheme.BORDER_STRONG);
+            IdeTheme.drawNineSlice(g, x, y, width, height, IdeTheme.NineSlice.POPUP);
             for (int i = 0; i < items.size(); i++) {
                 MenuItem item = items.get(i);
                 int iy = y + 1 + i * ITEM_HEIGHT;

@@ -18,6 +18,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -33,6 +34,20 @@ public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
     @Shadow(remap = false) private Set<HexCoord> usedSpots;
     @Shadow(remap = false) private List<net.minecraft.nbt.CompoundTag> cachedStack;
     @Shadow(remap = false) private void calculateIotaDisplays() { }
+
+    @Unique @Nullable
+    private static final Field IDE_DRAW_STATE_FIELD = findDrawStateField();
+
+    @Unique @Nullable
+    private static Field findDrawStateField() {
+        try {
+            Field f = GuiSpellcasting.class.getDeclaredField("drawState");
+            f.setAccessible(true);
+            return f;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
 
     @Unique @Nullable private BiConsumer<HexPattern, Integer> onDrawPattern$ide;
     @Unique private boolean ideWriteMode = true;
@@ -77,4 +92,18 @@ public abstract class MixinGuiSpellcasting implements IdeSpellcastingAccess {
     @Override public void setHexSizeOverride$ide(float hexSize) { hexSizeOverride$ide = hexSize; }
     @Override public void setCoordsOffsetOverride$ide(@Nullable Vec2 offset) { coordsOffsetOverride$ide = offset; }
     @Override public void recalcDisplays$ide() { calculateIotaDisplays(); }
+    @Override public boolean isDrawing$ide() {
+        if (IDE_DRAW_STATE_FIELD == null) return false;
+        try {
+            Object st = IDE_DRAW_STATE_FIELD.get(this);
+            return st != null && !"BetweenPatterns".equals(st.getClass().getSimpleName());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+    @Override public void cancelStroke$ide() {
+        if (isDrawing$ide()) {
+            ((net.minecraft.client.gui.screens.Screen) (Object) this).onClose();
+        }
+    }
 }

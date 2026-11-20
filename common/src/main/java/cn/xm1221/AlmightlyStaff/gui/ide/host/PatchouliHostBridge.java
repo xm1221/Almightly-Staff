@@ -11,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Deque;
 
 /**
  * Patchouli 手册软依赖隔离桥：全部通过反射调用，确保 common/fabric/forge
@@ -50,6 +51,54 @@ public final class PatchouliHostBridge {
             return v > 0.1f ? v : 1.0f;
         } catch (Throwable ignored) {
             return 1.0f;
+        }
+    }
+
+    @Nullable
+    @SuppressWarnings("unchecked")
+    private static Deque<Screen> getGuiStack(@Nullable Screen screen) {
+        if (!isPatchouliBook(screen)) return null;
+        try {
+            Class<?> guiBook = Class.forName("vazkii.patchouli.client.book.gui.GuiBook");
+            Field bookF = guiBook.getField("book");
+            Object book = bookF.get(screen);
+            if (book == null) return null;
+            Object contents = book.getClass().getMethod("getContents").invoke(book);
+            if (contents == null) return null;
+            Field stackF = contents.getClass().getField("guiStack");
+            Object stack = stackF.get(contents);
+            return stack instanceof Deque<?> ? (Deque<Screen>) stack : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    public static int guiStackSize(@Nullable Screen screen) {
+        Deque<Screen> stack = getGuiStack(screen);
+        return stack == null ? -1 : stack.size();
+    }
+
+    public static void pushGuiStack(@Nullable Screen oldScreen, @Nullable Screen nextScreen) {
+        if (oldScreen == null || nextScreen == null || oldScreen == nextScreen) return;
+        Deque<Screen> oldStack = getGuiStack(oldScreen);
+        Deque<Screen> nextStack = getGuiStack(nextScreen);
+        if (oldStack != null && oldStack == nextStack && oldStack.peek() != oldScreen) {
+            oldStack.push(oldScreen);
+        }
+    }
+
+    public static boolean tryBack(@Nullable Screen screen) {
+        if (!isPatchouliBook(screen)) return false;
+        Deque<Screen> stack = getGuiStack(screen);
+        if (stack == null || stack.isEmpty()) return false;
+        try {
+            Class<?> guiBook = Class.forName("vazkii.patchouli.client.book.gui.GuiBook");
+            Method m = guiBook.getDeclaredMethod("back", boolean.class);
+            m.setAccessible(true);
+            m.invoke(screen, true);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 

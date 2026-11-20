@@ -1,18 +1,24 @@
 package cn.xm1221.AlmightlyStaff.gui.ide.core;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 /**
- * IDE 视觉主题常量与整数像素绘制工具（延续 StaffLibScreen 深板岩 + 紫水晶风格）。
- * 严禁依赖系统 Emoji，图标全部像素绘制。
+ * 贴图驱动的 IDE 视觉主题（9-slice 面板/按钮/标签页 + 可着色 8x8 像素图标图集）。
+ * 图集路径：{@code assets/almightly_staff/textures/gui/ide_widgets.png}（256x256）。
  */
 public final class IdeTheme {
     private IdeTheme() {
     }
 
-    // ---- 色板 ----
+    public static final ResourceLocation WIDGETS_TEX =
+        new ResourceLocation("almightly_staff", "textures/gui/ide_widgets.png");
+
+    // ---- 色板（用于文字、代码高亮及贴图缺失兜底） ----
     public static final int BG_ROOT = 0xFF14181E;
     public static final int BG_PANEL = 0xFF1D2229;
     public static final int BG_ELEVATED = 0xFF252B34;
@@ -42,6 +48,34 @@ public final class IdeTheme {
     public static final int SCROLLBAR_WIDTH = 6;
     public static final int MIN_THUMB_HEIGHT = 16;
 
+    public enum NineSlice {
+        ROOT(0, 0, 32, 32, 3),
+        PANEL(32, 0, 32, 32, 3),
+        FLOAT_INACTIVE(64, 0, 32, 32, 3),
+        FLOAT_ACTIVE(96, 0, 32, 32, 3),
+        HEADER(128, 0, 32, 32, 3),
+        INPUT(160, 0, 32, 32, 3),
+        POPUP(192, 0, 32, 32, 3),
+        DOCK_PREVIEW(224, 0, 32, 32, 3),
+        BTN_NORMAL(0, 32, 32, 18, 3),
+        BTN_HOVER(32, 32, 32, 18, 3),
+        BTN_ACTIVE(64, 32, 32, 18, 3),
+        BTN_DISABLED(96, 32, 32, 18, 3),
+        TAB_ACTIVE(128, 32, 32, 20, 3),
+        TAB_INACTIVE(160, 32, 32, 20, 3),
+        SEALED_BANNER(192, 32, 32, 20, 3);
+
+        final int u, v, uw, vh, slice;
+
+        NineSlice(int u, int v, int uw, int vh, int slice) {
+            this.u = u;
+            this.v = v;
+            this.uw = uw;
+            this.vh = vh;
+            this.slice = slice;
+        }
+    }
+
     public enum Icon {
         FOLDER_CLOSED,
         FOLDER_OPEN,
@@ -55,7 +89,66 @@ public final class IdeTheme {
         CLOSE_X,
         SEARCH_GLASS,
         SAVE_DISK,
-        PLAY_CAST
+        PLAY_CAST,
+        MAXIMIZE_BOX,
+        RESTORE_BOX,
+        MINIMIZE_BAR,
+        HEX_GRID_ICON,
+        HEX_PARSE_ICON,
+        PLUS_ICON,
+        COPY_ICON,
+        TRASH_ICON,
+        MORE_DOTS,
+        CHECK_APPLY,
+        CENTER_RESET
+    }
+
+    private static Boolean cachedHasTex;
+
+    public static boolean hasTexture() {
+        if (cachedHasTex != null) return cachedHasTex;
+        try {
+            cachedHasTex = Minecraft.getInstance().getResourceManager().getResource(WIDGETS_TEX).isPresent();
+        } catch (Throwable t) {
+            cachedHasTex = false;
+        }
+        return cachedHasTex;
+    }
+
+    public static void drawNineSlice(GuiGraphics g, Bounds b, NineSlice style) {
+        if (b == null || b.isEmpty()) return;
+        drawNineSlice(g, b.x(), b.y(), b.w(), b.h(), style);
+    }
+
+    public static void drawNineSlice(GuiGraphics g, int x, int y, int w, int h, NineSlice style) {
+        if (w <= 0 || h <= 0) return;
+        if (hasTexture()) {
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+            g.blitNineSliced(WIDGETS_TEX, x, y, w, h, style.slice, style.uw, style.vh, style.u, style.v);
+            return;
+        }
+        int fill = switch (style) {
+            case ROOT, TAB_ACTIVE -> BG_ROOT;
+            case PANEL, FLOAT_INACTIVE, FLOAT_ACTIVE, TAB_INACTIVE -> BG_PANEL;
+            case HEADER, BTN_NORMAL -> BG_ELEVATED;
+            case INPUT -> 0xFF11151B;
+            case POPUP -> 0xF018111F;
+            case DOCK_PREVIEW -> 0x449C6ADE;
+            case BTN_HOVER -> BG_HOVER;
+            case BTN_ACTIVE -> BG_ACTIVE;
+            case BTN_DISABLED -> 0xFF1A1E24;
+            case SEALED_BANNER -> GOLD_SEAL_FILL;
+        };
+        int border = switch (style) {
+            case FLOAT_ACTIVE, POPUP, BTN_ACTIVE -> ACCENT;
+            case DOCK_PREVIEW -> ACCENT_LIGHT;
+            case SEALED_BANNER -> GOLD_SEAL;
+            default -> BORDER;
+        };
+        g.fill(x, y, x + w, y + h, fill);
+        drawBorder(g, x, y, w, h, border);
     }
 
     public static void drawBorder(GuiGraphics g, int x, int y, int w, int h, int color) {
@@ -104,76 +197,21 @@ public final class IdeTheme {
         g.drawString(font, trimText(font, text.getString(), maxWidth), x, y, color, false);
     }
 
-    /** 绘制 8x8 整数像素图标，绝不依赖系统 Emoji 字体。 */
+    /** 从 256x256 图集绘制 8x8 可着色像素图标。 */
     public static void drawIcon(GuiGraphics g, Icon icon, int x, int y, int color) {
-        switch (icon) {
-            case FOLDER_CLOSED -> {
-                g.fill(x, y + 1, x + 4, y + 2, color);
-                g.fill(x, y + 2, x + 8, y + 7, color);
-                g.fill(x + 1, y + 3, x + 7, y + 6, BG_PANEL);
-            }
-            case FOLDER_OPEN -> {
-                g.fill(x, y + 1, x + 4, y + 2, color);
-                g.fill(x, y + 2, x + 8, y + 4, color);
-                g.fill(x + 1, y + 4, x + 8, y + 7, color);
-            }
-            case SPELL_STAR -> {
-                g.fill(x + 3, y, x + 5, y + 8, color);
-                g.fill(x, y + 3, x + 8, y + 5, color);
-                g.fill(x + 2, y + 2, x + 6, y + 6, color);
-            }
-            case NOTE_DOC -> {
-                g.fill(x + 1, y, x + 7, y + 8, color);
-                g.fill(x + 2, y + 1, x + 6, y + 7, BG_PANEL);
-                g.fill(x + 3, y + 2, x + 6, y + 3, color);
-                g.fill(x + 3, y + 4, x + 6, y + 5, color);
-            }
-            case BOOK_EXTERNAL -> {
-                g.fill(x + 1, y + 1, x + 7, y + 7, color);
-                g.fill(x + 2, y + 2, x + 4, y + 6, BG_PANEL);
-                g.fill(x + 5, y + 2, x + 6, y + 6, BG_PANEL);
-            }
-            case PADLOCK -> {
-                g.fill(x + 2, y, x + 6, y + 1, color);
-                g.fill(x + 2, y + 1, x + 3, y + 4, color);
-                g.fill(x + 5, y + 1, x + 6, y + 4, color);
-                g.fill(x + 1, y + 4, x + 7, y + 8, color);
-                g.fill(x + 3, y + 5, x + 5, y + 7, 0xFF2A2114);
-            }
-            case SPLIT_VIEW -> {
-                drawBorder(g, x, y + 1, 8, 6, color);
-                g.fill(x + 3, y + 1, x + 5, y + 7, color);
-            }
-            case FLOAT_WIN -> {
-                drawBorder(g, x + 2, y, 6, 5, color);
-                g.fill(x, y + 3, x + 5, y + 8, color);
-                g.fill(x + 1, y + 4, x + 4, y + 7, BG_PANEL);
-            }
-            case DOCK_BACK -> {
-                drawBorder(g, x, y + 1, 8, 6, color);
-                g.fill(x + 1, y + 2, x + 3, y + 6, color);
-            }
-            case CLOSE_X -> {
-                for (int i = 1; i <= 6; i++) {
-                    g.fill(x + i, y + i, x + i + 1, y + i + 1, color);
-                    g.fill(x + 7 - i, y + i, x + 8 - i, y + i + 1, color);
-                }
-            }
-            case SEARCH_GLASS -> {
-                drawBorder(g, x + 1, y + 1, 5, 5, color);
-                g.fill(x + 5, y + 5, x + 6, y + 6, color);
-                g.fill(x + 6, y + 6, x + 8, y + 8, color);
-            }
-            case SAVE_DISK -> {
-                g.fill(x + 1, y + 1, x + 7, y + 7, color);
-                g.fill(x + 2, y + 1, x + 6, y + 3, BG_PANEL);
-                g.fill(x + 2, y + 4, x + 6, y + 7, BG_PANEL);
-            }
-            case PLAY_CAST -> {
-                g.fill(x + 1, y + 1, x + 3, y + 7, color);
-                g.fill(x + 3, y + 2, x + 5, y + 6, color);
-                g.fill(x + 5, y + 3, x + 7, y + 5, color);
-            }
+        if (hasTexture()) {
+            float a = ((color >>> 24) & 0xFF) / 255.0F;
+            if (a <= 0.01F) a = 1.0F;
+            float r = ((color >>> 16) & 0xFF) / 255.0F;
+            float gr = ((color >>> 8) & 0xFF) / 255.0F;
+            float b = (color & 0xFF) / 255.0F;
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            g.setColor(r, gr, b, a);
+            g.blit(WIDGETS_TEX, x, y, icon.ordinal() * 10, 64, 8, 8);
+            g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+            return;
         }
+        g.fill(x + 1, y + 1, x + 7, y + 7, color);
     }
 }

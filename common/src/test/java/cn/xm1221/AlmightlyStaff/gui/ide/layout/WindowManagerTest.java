@@ -43,18 +43,19 @@ class WindowManagerTest {
         wm.add(winB);
         assertSame(winB, wm.activeWindow());
 
+        Bounds area = new Bounds(0, 20, 600, 400);
         // 点在重叠区 (120, 100)：应命中 B，不穿透 A
-        assertTrue(wm.mouseClicked(120, 100, 0));
+        assertTrue(wm.mouseClicked(120, 100, 0, area));
         assertEquals(1, bClicks.get());
         assertEquals(0, aClicks.get());
 
         // 点在仅属于 A 的内容区 (60, 80)：命中 A 并将其置顶（50..70 是标题栏）
-        assertTrue(wm.mouseClicked(60, 80, 0));
+        assertTrue(wm.mouseClicked(60, 80, 0, area));
         assertEquals(1, aClicks.get());
         assertSame(winA, wm.activeWindow());
         assertSame(winA, wm.windows().get(1));
 
         // 点在窗口外：返回 false 并清空 activeWindow
-        assertFalse(wm.mouseClicked(10, 10, 0));
+        assertFalse(wm.mouseClicked(10, 10, 0, area));
     }
 }

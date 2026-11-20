@@ -1,6 +1,5 @@
 package cn.xm1221.AlmightlyStaff.gui.ide.tool;
 
-import at.petrak.hexcasting.api.casting.eval.ExecutionClientView;
 import at.petrak.hexcasting.api.casting.eval.ResolvedPattern;
 import at.petrak.hexcasting.api.casting.iota.IotaType;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
@@ -30,9 +29,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 下侧工具窗：内嵌原版 {@link GuiSpellcasting} 六边形网格（写入模式直插光标 / 施法采集栈模式）。
- * 复用 HexGuide SpellcastingPage 已验证技术方案：只 init 一次并停掉环境音，
- * 布局变动只更新 {@code hexSizeOverride$ide} 与 {@code coordsOffsetOverride$ide}。
+ * 独立六边形画板窗口（纯写入模式：画完立刻插入光标并清网格）。
+ * 支持滚轮缩放、右键/中键拖拽平移、重置居中以及 ESC 先取消未完成笔划。
  */
 public final class HexGridPanel implements IdeComponent {
     private static final int TOOLBAR_H = 18;
@@ -45,8 +43,10 @@ public final class HexGridPanel implements IdeComponent {
     @Nullable
     private GuiSpellcasting spellcasting;
     private float hexSize = 22.0f;
-    private boolean castMode = false;
+    private float panX = 0.0f;
+    private float panY = 0.0f;
     private boolean mouseHeld = false;
+    private boolean panning = false;
 
     public HexGridPanel(IdeSession session, Consumer<List<CompoundTag>> insertCallback) {
         this.session = session;
@@ -74,14 +74,10 @@ public final class HexGridPanel implements IdeComponent {
         spellcasting.init(mc, win.getGuiScaledWidth(), win.getGuiScaledHeight());
         stopSound();
         IdeSpellcastingAccess ia = as(spellcasting);
-        ia.setIdeWriteMode$ide(!castMode);
+        ia.setIdeWriteMode$ide(true);
         ia.setCastCollectMode$ide(true);
         ia.setHexSizeOverride$ide(hexSize);
-        ia.setOnDrawPattern$ide((pat, idx) -> {
-            if (!castMode) {
-                onPatternDrawnInWriteMode(pat);
-            }
-        });
+        ia.setOnDrawPattern$ide((pat, idx) -> onPatternDrawn(pat));
         updateCenterOffset();
     }
 
@@ -90,10 +86,10 @@ public final class HexGridPanel implements IdeComponent {
         Bounds cb = canvasBounds();
         IdeSpellcastingAccess ia = as(spellcasting);
         ia.setHexSizeOverride$ide(hexSize);
-        ia.setCoordsOffsetOverride$ide(new Vec2(cb.x() + cb.w() / 2.0f, cb.y() + cb.h() / 2.0f));
+        ia.setCoordsOffsetOverride$ide(new Vec2(cb.x() + cb.w() / 2.0f + panX, cb.y() + cb.h() / 2.0f + panY));
     }
 
-    private void onPatternDrawnInWriteMode(HexPattern pat) {
+    private void onPatternDrawn(HexPattern pat) {
         session.learnGreatSpell(StaffHex.refFor(pat));
         CompoundTag tag = IotaType.serialize(new PatternIota(pat));
         insertCallback.accept(List.of(tag));
@@ -103,18 +99,23 @@ public final class HexGridPanel implements IdeComponent {
         }
     }
 
-    public void onServerUpdate(ExecutionClientView info, int index) {
-        if (spellcasting == null) return;
-        if (info.isStackClear()) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            ia.setStackClear$ide();
-            return;
-        }
-        spellcasting.recvServerUpdate(info, index);
+    public boolean hasUnfinishedStroke() {
+        if (spellcasting == null) return false;
+        IdeSpellcastingAccess ia = as(spellcasting);
+        return ia.isDrawing$ide();
+    }
+
+    public boolean cancelUnfinishedStroke() {
+        if (!hasUnfinishedStroke()) return false;
+        IdeSpellcastingAccess ia = as(spellcasting);
+        ia.cancelStroke$ide();
+        mouseHeld = false;
+        return true;
     }
 
     public void dispose() {
         mouseHeld = false;
+        panning = false;
         stopSound();
     }
 
@@ -143,38 +144,24 @@ public final class HexGridPanel implements IdeComponent {
         if (bounds.isEmpty()) return;
         ensureInitialized();
         Font font = Minecraft.getInstance().font;
-        g.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BG_ROOT);
+        IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.ROOT);
 
-        // 工具条
         Bounds tb = toolbarBounds();
-        g.fill(tb.x(), tb.y(), tb.right(), tb.bottom(), IdeTheme.BG_PANEL);
-        g.fill(tb.x(), tb.bottom() - 1, tb.right(), tb.bottom(), IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, tb, IdeTheme.NineSlice.PANEL);
         try (IdeScissor.Scope sc = IdeScissor.push(g, tb)) {
             int x = tb.x() + 4;
             int y = tb.y() + 2;
-            String modeTxt = Component.translatable(castMode ? "almightly_staff.ide.grid_cast" : "almightly_staff.ide.grid_write").getString();
-            int modeW = font.width(modeTxt) + 10;
-            drawMiniButton(g, font, x, y, modeW, 14, modeTxt, castMode, mouseX, mouseY);
-            x += modeW + 4;
-
-            drawMiniButton(g, font, x, y, 14, 14, "-", false, mouseX, mouseY);
+            drawTextBtn(g, font, x, y, 14, 14, "-", mouseX, mouseY);
             x += 16;
-            drawMiniButton(g, font, x, y, 14, 14, "+", false, mouseX, mouseY);
+            drawTextBtn(g, font, x, y, 14, 14, "+", mouseX, mouseY);
             x += 18;
-
-            String clearTxt = Component.translatable("almightly_staff.gui.clear_pattern").getString();
-            int clearW = font.width(clearTxt) + 10;
-            drawMiniButton(g, font, x, y, clearW, 14, clearTxt, false, mouseX, mouseY);
-            x += clearW + 4;
-
-            if (castMode) {
-                String collectTxt = Component.translatable("almightly_staff.ide.collect_stack").getString();
-                int colW = font.width(collectTxt) + 10;
-                drawMiniButton(g, font, x, y, colW, 14, collectTxt, true, mouseX, mouseY);
-            }
+            drawIconBtn(g, x, y, 14, 14, IdeTheme.Icon.CENTER_RESET, mouseX, mouseY);
+            x += 18;
+            String clr = Component.translatable("almightly_staff.gui.clear_pattern").getString();
+            int clrW = font.width(clr) + 10;
+            drawTextBtn(g, font, x, y, clrW, 14, clr, mouseX, mouseY);
         }
 
-        // 画布区
         Bounds cb = canvasBounds();
         if (cb.isEmpty()) return;
         try (IdeScissor.Scope sc = IdeScissor.push(g, cb)) {
@@ -183,30 +170,18 @@ public final class HexGridPanel implements IdeComponent {
             if (spellcasting != null) {
                 spellcasting.render(g, mouseX, mouseY, partialTick);
             }
-            if (castMode && spellcasting != null) {
-                renderCompactStackOverlay(g, font, cb);
-            }
         }
         driveDrag();
     }
 
-    private void renderCompactStackOverlay(GuiGraphics g, Font font, Bounds cb) {
-        IdeSpellcastingAccess ia = as(spellcasting);
-        List<CompoundTag> stack = ia.getStack$ide();
-        if (stack == null || stack.isEmpty()) return;
-        int showCount = Math.min(4, stack.size());
-        int boxW = Math.min(cb.w() - 8, 170);
-        int boxH = showCount * 11 + 6;
-        int x = cb.x() + 4;
-        int y = cb.y() + 4;
-        g.fill(x, y, x + boxW, y + boxH, 0xBB181C22);
-        IdeTheme.drawBorder(g, x, y, boxW, boxH, IdeTheme.BORDER);
-        for (int i = 0; i < showCount; i++) {
-            CompoundTag tag = stack.get(stack.size() - 1 - i);
-            String txt = IdeTheme.trimText(font, IotaType.getDisplay(tag).getString(), boxW - 14);
-            int col = IotaType.getColor(tag) | 0xFF000000;
-            g.fill(x + 4, y + 4 + i * 11, x + 7, y + 10 + i * 11, col);
-            g.drawString(font, txt, x + 10, y + 3 + i * 11, IdeTheme.TEXT_MAIN, false);
+    @Override
+    public void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        Bounds tb = toolbarBounds();
+        if (!tb.contains(mouseX, mouseY)) return;
+        int x = tb.x() + 4 + 16 + 18;
+        if (mouseX >= x && mouseX < x + 14 && mouseY >= tb.y() + 2 && mouseY < tb.y() + 16) {
+            g.renderTooltip(Minecraft.getInstance().font,
+                Component.translatable("almightly_staff.ide.grid_center"), mouseX, mouseY);
         }
     }
 
@@ -228,14 +203,16 @@ public final class HexGridPanel implements IdeComponent {
         }
     }
 
-    private static void drawMiniButton(GuiGraphics g, Font font, int x, int y, int w, int h,
-                                       String text, boolean accent, int mx, int my) {
-        boolean hover = mx >= x && mx < x + w && my >= y && my < y + h;
-        int fill = accent ? IdeTheme.BG_ACTIVE : (hover ? IdeTheme.BG_HOVER : IdeTheme.BG_ELEVATED);
-        int border = accent ? IdeTheme.ACCENT : IdeTheme.BORDER_STRONG;
-        g.fill(x, y, x + w, y + h, fill);
-        IdeTheme.drawBorder(g, x, y, w, h, border);
-        g.drawCenteredString(font, text, x + w / 2, y + 3, IdeTheme.TEXT_MAIN);
+    private static void drawTextBtn(GuiGraphics g, Font font, int x, int y, int w, int h, String txt, int mx, int my) {
+        boolean hov = mx >= x && mx < x + w && my >= y && my < y + h;
+        IdeTheme.drawNineSlice(g, x, y, w, h, hov ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL);
+        g.drawCenteredString(font, txt, x + w / 2, y + 3, IdeTheme.TEXT_MAIN);
+    }
+
+    private static void drawIconBtn(GuiGraphics g, int x, int y, int w, int h, IdeTheme.Icon icon, int mx, int my) {
+        boolean hov = mx >= x && mx < x + w && my >= y && my < y + h;
+        IdeTheme.drawNineSlice(g, x, y, w, h, hov ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL);
+        IdeTheme.drawIcon(g, icon, x + (w - 8) / 2, y + (h - 8) / 2, IdeTheme.TEXT_MAIN);
     }
 
     @Override
@@ -246,6 +223,10 @@ public final class HexGridPanel implements IdeComponent {
             return handleToolbarClick(mx, my);
         }
         if (canvasBounds().contains(mx, my) && spellcasting != null) {
+            if (button == 1 || button == 2) {
+                panning = true;
+                return true;
+            }
             if (button == 0) mouseHeld = true;
             spellcasting.mouseClicked(mx, my, button);
             return true;
@@ -259,69 +240,39 @@ public final class HexGridPanel implements IdeComponent {
         int x = tb.x() + 4;
         int y = tb.y() + 2;
         if (my < y || my >= y + 14) return true;
-
-        String modeTxt = Component.translatable(castMode ? "almightly_staff.ide.grid_cast" : "almightly_staff.ide.grid_write").getString();
-        int modeW = font.width(modeTxt) + 10;
-        if (mx >= x && mx < x + modeW) {
-            toggleCastMode();
-            return true;
-        }
-        x += modeW + 4;
-        if (mx >= x && mx < x + 14) {
-            adjustZoom(-2f);
-            return true;
-        }
+        if (mx >= x && mx < x + 14) { adjustZoom(-2f); return true; }
         x += 16;
+        if (mx >= x && mx < x + 14) { adjustZoom(2f); return true; }
+        x += 18;
         if (mx >= x && mx < x + 14) {
-            adjustZoom(2f);
+            panX = 0.0f;
+            panY = 0.0f;
+            updateCenterOffset();
             return true;
         }
         x += 18;
-        String clearTxt = Component.translatable("almightly_staff.gui.clear_pattern").getString();
-        int clearW = font.width(clearTxt) + 10;
-        if (mx >= x && mx < x + clearW) {
-            if (spellcasting != null) {
-                IdeSpellcastingAccess ia = as(spellcasting);
-                ia.clearPatterns$ide();
-            }
+        String clr = Component.translatable("almightly_staff.gui.clear_pattern").getString();
+        int clrW = font.width(clr) + 10;
+        if (mx >= x && mx < x + clrW && spellcasting != null) {
+            IdeSpellcastingAccess ia = as(spellcasting);
+            ia.clearPatterns$ide();
             return true;
-        }
-        x += clearW + 4;
-        if (castMode) {
-            String collectTxt = Component.translatable("almightly_staff.ide.collect_stack").getString();
-            int colW = font.width(collectTxt) + 10;
-            if (mx >= x && mx < x + colW && spellcasting != null) {
-                IdeSpellcastingAccess ia = as(spellcasting);
-                List<CompoundTag> stack = ia.getStack$ide();
-                if (!stack.isEmpty()) {
-                    insertCallback.accept(stack);
-                }
-                return true;
-            }
         }
         return true;
     }
 
-    private void toggleCastMode() {
-        castMode = !castMode;
-        if (spellcasting != null) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            ia.setIdeWriteMode$ide(!castMode);
-            ia.clearPatterns$ide();
-            if (castMode) {
-                ia.setStackClear$ide();
-                session.network().clearCastStack();
-            }
-        }
-    }
-
     private void adjustZoom(float delta) {
-        hexSize = Mth.clamp(hexSize + delta, 14.0f, 36.0f);
+        hexSize = Mth.clamp(hexSize + delta, 12.0f, 40.0f);
         updateCenterOffset();
     }
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
+        if (button == 1 || button == 2) {
+            boolean was = panning;
+            panning = false;
+            return was;
+        }
         if (button == 0) mouseHeld = false;
         if (spellcasting != null && (canvasBounds().contains(mx, my) || !mouseHeld)) {
             spellcasting.mouseReleased(mx, my, button);
@@ -332,6 +283,12 @@ public final class HexGridPanel implements IdeComponent {
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (panning && (button == 1 || button == 2)) {
+            panX += (float) dx;
+            panY += (float) dy;
+            updateCenterOffset();
+            return true;
+        }
         if (button == 0 && mouseHeld && spellcasting != null) {
             spellcasting.mouseDragged(mx, my, button, dx, dy);
             return true;
@@ -361,12 +318,5 @@ public final class HexGridPanel implements IdeComponent {
         double x = mh.xpos() * win.getGuiScaledWidth() / win.getScreenWidth();
         double y = mh.ypos() * win.getGuiScaledHeight() / win.getScreenHeight();
         spellcasting.mouseDragged(x, y, 0, 0, 0);
-    }
-
-    @Override
-    public void tick() {
-        if (spellcasting != null && !bounds.isEmpty()) {
-            // 不调 spellcasting.tick() 以避免它检查手中法杖后误调 closeForReal()
-        }
     }
 }

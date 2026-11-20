@@ -120,7 +120,7 @@ public final class MarkdownNotePanel implements IdeComponent {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         if (bounds.isEmpty()) return;
         Font font = Minecraft.getInstance().font;
-        g.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BG_ROOT);
+        IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.ROOT);
         chipHits.clear();
         codeHits.clear();
 
@@ -160,8 +160,7 @@ public final class MarkdownNotePanel implements IdeComponent {
                 } else if (block instanceof MarkdownNoteParser.CodeBlock cb) {
                     String[] codeLines = cb.code().split("\n", -1);
                     int boxH = codeLines.length * 11 + 22;
-                    g.fill(body.x(), y, body.right(), y + boxH, IdeTheme.BG_PANEL);
-                    IdeTheme.drawBorder(g, body.x(), y, body.w(), boxH, IdeTheme.BORDER_STRONG);
+                    IdeTheme.drawNineSlice(g, body.x(), y, body.w(), boxH, IdeTheme.NineSlice.PANEL);
                     String langLabel = cb.lang().isEmpty() ? "code" : cb.lang();
                     g.drawString(font, langLabel, body.x() + 6, y + 4, IdeTheme.TEXT_MUTED, false);
 
@@ -169,8 +168,7 @@ public final class MarkdownNotePanel implements IdeComponent {
                     int bw = font.width(insertLabel) + 10;
                     Bounds btnB = new Bounds(body.right() - bw - 4, y + 2, bw, 14);
                     boolean hov = btnB.contains(mouseX, mouseY);
-                    g.fill(btnB.x(), btnB.y(), btnB.right(), btnB.bottom(), hov ? IdeTheme.BG_ACTIVE : IdeTheme.ACCENT_SOFT);
-                    IdeTheme.drawBorder(g, btnB, IdeTheme.ACCENT);
+                    IdeTheme.drawNineSlice(g, btnB, hov ? IdeTheme.NineSlice.BTN_ACTIVE : IdeTheme.NineSlice.BTN_NORMAL);
                     g.drawCenteredString(font, insertLabel, btnB.x() + bw / 2, btnB.y() + 3, IdeTheme.TEXT_MAIN);
                     codeHits.add(new CodeHit(btnB, cb.code()));
 
@@ -224,8 +222,7 @@ public final class MarkdownNotePanel implements IdeComponent {
                 }
                 Bounds cb = new Bounds(x, y, cw, 14);
                 boolean hov = cb.contains(mx, my);
-                g.fill(cb.x(), cb.y(), cb.right(), cb.bottom(), hov ? IdeTheme.BG_ACTIVE : IdeTheme.ACCENT_SOFT);
-                IdeTheme.drawBorder(g, cb, IdeTheme.ACCENT);
+                IdeTheme.drawNineSlice(g, cb, hov ? IdeTheme.NineSlice.BTN_ACTIVE : IdeTheme.NineSlice.BTN_HOVER);
                 g.drawString(font, txt, cb.x() + 5, cb.y() + 3, IdeTheme.ACCENT_LIGHT, false);
                 chipHits.add(new ChipHit(cb, chip));
                 x += cw + 4;

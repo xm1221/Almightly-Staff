@@ -46,6 +46,7 @@ public final class EmbeddedScreenHost implements IdeComponent {
     private int lastInitW = -1;
     private int lastInitH = -1;
     private boolean initialized = false;
+    private int stackDepthBeforeDispatch = -1;
 
     public EmbeddedScreenHost(Screen initialScreen, Runnable onCloseHost, Consumer<PatternRef> onInsertPattern) {
         this.subScreen = initialScreen;
@@ -113,6 +114,14 @@ public final class EmbeddedScreenHost implements IdeComponent {
 
     public void replaceSubScreen(Screen next) {
         if (next == null) return;
+        Screen prev = this.subScreen;
+        // Patchouli openLexiconGui 只在 mc.screen instanceof GuiBook 时 push guiStack；
+        // 在 IDE 宿主内 mc.screen 为 StaffIdeScreen，前跳导航时由宿主补回入栈，回退(pop)时不再压栈。
+        int stackAfter = PatchouliHostBridge.guiStackSize(next);
+        if (prev != null && prev != next && stackDepthBeforeDispatch >= 0 && stackAfter >= stackDepthBeforeDispatch) {
+            PatchouliHostBridge.pushGuiStack(prev, next);
+        }
+        stackDepthBeforeDispatch = -1;
         this.subScreen = next;
         this.initialized = false;
         initSubScreenIfNeeded();
@@ -133,10 +142,15 @@ public final class EmbeddedScreenHost implements IdeComponent {
             initialized = true;
             lastInitW = body.w();
             lastInitH = body.h();
+            Minecraft mc = Minecraft.getInstance();
+            double prevGuiScale = mc.getWindow().getGuiScale();
             dispatchStack.push(this);
             try {
-                subScreen.init(Minecraft.getInstance(), Math.max(280, body.w()), Math.max(192, body.h()));
+                subScreen.init(mc, Math.max(280, body.w()), Math.max(192, body.h()));
             } finally {
+                if (mc.getWindow().getGuiScale() != prevGuiScale) {
+                    mc.getWindow().setGuiScale(prevGuiScale);
+                }
                 if (!dispatchStack.isEmpty() && dispatchStack.peek() == this) {
                     dispatchStack.pop();
                 }
@@ -190,7 +204,7 @@ public final class EmbeddedScreenHost implements IdeComponent {
         if (bounds.isEmpty() || subScreen == null) return;
         initSubScreenIfNeeded();
         Font font = Minecraft.getInstance().font;
-        g.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BG_ROOT);
+        IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.ROOT);
 
         Bounds body = bodyBounds();
         if (!body.isEmpty()) {
@@ -219,8 +233,7 @@ public final class EmbeddedScreenHost implements IdeComponent {
 
         // 底部辅助条：提示 ESC 只关当前嵌入面板 + 识别 Patchouli 当前页图案一键插入
         Bounds fb = footerBounds();
-        g.fill(fb.x(), fb.y(), fb.right(), fb.bottom(), IdeTheme.BG_PANEL);
-        g.fill(fb.x(), fb.y(), fb.right(), fb.y() + 1, IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, fb, IdeTheme.NineSlice.HEADER);
         try (IdeScissor.Scope sc = IdeScissor.push(g, fb)) {
             PatternRef pagePat = PatchouliHostBridge.extractVisiblePattern(subScreen);
             if (pagePat != null) {
@@ -228,14 +241,8 @@ public final class EmbeddedScreenHost implements IdeComponent {
                 int bw = font.width(btnTxt) + 12;
                 Bounds btnB = new Bounds(fb.right() - bw - 6, fb.y() + 3, bw, 14);
                 boolean hov = btnB.contains(mouseX, mouseY);
-                g.fill(btnB.x(), btnB.y(), btnB.right(), btnB.bottom(), hov ? IdeTheme.BG_ACTIVE : IdeTheme.ACCENT_SOFT);
-                IdeTheme.drawBorder(g, btnB, IdeTheme.ACCENT);
+                IdeTheme.drawNineSlice(g, btnB, hov ? IdeTheme.NineSlice.BTN_ACTIVE : IdeTheme.NineSlice.BTN_HOVER);
                 g.drawCenteredString(font, btnTxt, btnB.x() + bw / 2, btnB.y() + 3, IdeTheme.ACCENT_LIGHT);
-                IdeTheme.drawClippedString(g, font, Component.translatable("almightly_staff.ide.embedded_hint"),
-                    fb.x() + 6, fb.y() + 6, Math.max(10, btnB.x() - fb.x() - 12), IdeTheme.TEXT_MUTED);
-            } else {
-                IdeTheme.drawClippedString(g, font, Component.translatable("almightly_staff.ide.embedded_hint"),
-                    fb.x() + 6, fb.y() + 6, fb.w() - 12, IdeTheme.TEXT_MUTED);
             }
         }
     }
@@ -263,10 +270,12 @@ public final class EmbeddedScreenHost implements IdeComponent {
         Transform tr = computeTransform(body);
         double lmx = (mx - tr.tx()) / tr.scale();
         double lmy = (my - tr.ty()) / tr.scale();
+        stackDepthBeforeDispatch = PatchouliHostBridge.guiStackSize(subScreen);
         dispatchStack.push(this);
         try {
             subScreen.mouseClicked(lmx, lmy, button);
         } finally {
+            stackDepthBeforeDispatch = -1;
             if (!dispatchStack.isEmpty() && dispatchStack.peek() == this) {
                 dispatchStack.pop();
             }
@@ -278,10 +287,12 @@ public final class EmbeddedScreenHost implements IdeComponent {
     public boolean mouseReleased(double mx, double my, int button) {
         if (subScreen == null || !bodyBounds().contains(mx, my)) return false;
         Transform tr = computeTransform(bodyBounds());
+        stackDepthBeforeDispatch = PatchouliHostBridge.guiStackSize(subScreen);
         dispatchStack.push(this);
         try {
             return subScreen.mouseReleased((mx - tr.tx()) / tr.scale(), (my - tr.ty()) / tr.scale(), button);
         } finally {
+            stackDepthBeforeDispatch = -1;
             if (!dispatchStack.isEmpty() && dispatchStack.peek() == this) {
                 dispatchStack.pop();
             }
@@ -321,21 +332,27 @@ public final class EmbeddedScreenHost implements IdeComponent {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (subScreen == null) return false;
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            // 优先关闭当前内嵌面板/子界面，不退出整个万法之杖 IDE
+            // 若 Patchouli 当前可回退历史栈则先退一页，否则关闭当前内嵌宿主
+            stackDepthBeforeDispatch = PatchouliHostBridge.guiStackSize(subScreen);
             dispatchStack.push(this);
             try {
-                subScreen.onClose();
+                if (!PatchouliHostBridge.tryBack(subScreen)) {
+                    subScreen.onClose();
+                }
             } finally {
+                stackDepthBeforeDispatch = -1;
                 if (!dispatchStack.isEmpty() && dispatchStack.peek() == this) {
                     dispatchStack.pop();
                 }
             }
             return true;
         }
+        stackDepthBeforeDispatch = PatchouliHostBridge.guiStackSize(subScreen);
         dispatchStack.push(this);
         try {
             return subScreen.keyPressed(keyCode, scanCode, modifiers);
         } finally {
+            stackDepthBeforeDispatch = -1;
             if (!dispatchStack.isEmpty() && dispatchStack.peek() == this) {
                 dispatchStack.pop();
             }

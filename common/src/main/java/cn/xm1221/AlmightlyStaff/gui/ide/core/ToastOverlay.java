@@ -44,7 +44,7 @@ public final class ToastOverlay {
         ps.pushPose();
         ps.translate(0.0F, 0.0F, 680.0F);
         try {
-            g.fill(x, y, x + w, y + h, IdeTheme.BG_ELEVATED);
+            IdeTheme.drawNineSlice(g, x, y, w, h, IdeTheme.NineSlice.POPUP);
             IdeTheme.drawBorder(g, x, y, w, h, accentColor);
             g.drawString(font, txt, x + 7, y + 5, IdeTheme.TEXT_MAIN, false);
         } finally {

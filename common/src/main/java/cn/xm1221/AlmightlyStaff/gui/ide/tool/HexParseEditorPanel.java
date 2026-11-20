@@ -34,18 +34,17 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 下侧 HexParse 多行代码编辑器：
+ * 独立 HexParse 多行代码窗口：
  * <ul>
- *   <li>基于 {@link TextFieldHelper}，支持选区/剪贴板/词法着色/括号匹配/折行缓存（500+ 行高帧率）</li>
- *   <li>基于 {@code PatternRegistry} 目录的前缀自动补全弹窗</li>
- *   <li>200ms（4 ticks）防抖双向同步：合法更新 {@link SpellDocument}，报错保留上次合法 Iota</li>
+ *   <li>显式应用策略：输入不触发 200ms 自动覆写；通过「应用」按钮 / Ctrl+Enter / 失焦且语法合法时写回 {@link SpellDocument}</li>
+ *   <li>支持鼠标拖拽选区、13px 舒适行高、词法高亮、括号匹配、Tab 自动补全（不劫持 Enter 换行）</li>
  * </ul>
  */
 public final class HexParseEditorPanel implements IdeComponent, IdeSession.Listener {
+    private static final int TOOLBAR_H = 18;
     private static final int GUTTER_W = 28;
-    private static final int ROW_H = 11;
+    private static final int ROW_H = 13;
     private static final int STATUS_H = 16;
-    private static final int DEBOUNCE_TICKS = 4;
 
     private record WrappedRow(int logicalLine, int startOffset, int endOffset, String text) {
     }
@@ -69,7 +68,8 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
     private final TextFieldHelper helper;
     private int scrollRow = 0;
     private boolean suppressTextEvents = false;
-    private int debounceTicks = 0;
+    private boolean hasPendingDraft = false;
+    private boolean draggingSelection = false;
     private int latestRequestId = 0;
 
     private int errorLine = -1;
@@ -98,7 +98,15 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         code = next;
         textVersion++;
         if (!suppressTextEvents) {
-            debounceTicks = DEBOUNCE_TICKS;
+            hasPendingDraft = true;
+            HexParseLexer.BracketReport br = HexParseLexer.checkBrackets(code);
+            if (!br.balanced()) {
+                errorLine = br.errorLine();
+                errorText = br.errorMessage();
+            } else {
+                errorLine = -1;
+                errorText = "";
+            }
             updateCompletions();
         }
     }
@@ -140,7 +148,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         code = next == null ? "" : next;
         textVersion++;
         helper.setCursorPos(Math.min(helper.getCursorPos(), code.length()), false);
-        debounceTicks = 0;
+        hasPendingDraft = false;
         completionOpen = false;
         suppressTextEvents = false;
     }
@@ -171,13 +179,18 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         }
         errorLine = -1;
         errorText = "";
+        hasPendingDraft = false;
         if (!boundDoc.isSealed() && boundDoc.replaceAll(tags, "parse", true)) {
             onDocumentSynced.run();
         }
     }
 
+    private Bounds toolbarBounds() {
+        return new Bounds(bounds.x(), bounds.y(), bounds.w(), Math.min(TOOLBAR_H, bounds.h()));
+    }
+
     private Bounds editorBodyBounds() {
-        return bounds.inset(0, 0, 0, STATUS_H);
+        return bounds.inset(0, TOOLBAR_H, 0, STATUS_H);
     }
 
     private Bounds textContentBounds() {
@@ -244,6 +257,17 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         return Math.max(0, cachedRows.size() - 1);
     }
 
+    private int offsetAtPoint(Font font, double mx, double my) {
+        ensureWrapCache(font);
+        Bounds textArea = textContentBounds();
+        int vi = Math.max(0, (int) ((my - textArea.y()) / ROW_H));
+        int rIdx = Mth.clamp(scrollRow + vi, 0, Math.max(0, cachedRows.size() - 1));
+        WrappedRow row = cachedRows.get(rIdx);
+        int lx = Math.max(0, (int) (mx - textArea.x()));
+        int col = font.getSplitter().plainIndexAtWidth(row.text(), lx, Style.EMPTY);
+        return Math.min(code.length(), row.startOffset() + col);
+    }
+
     private void ensureCursorVisible(Font font) {
         ensureWrapCache(font);
         int visible = Math.max(1, textContentBounds().h() / ROW_H);
@@ -268,13 +292,35 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         if (bounds.isEmpty()) return;
         Font font = Minecraft.getInstance().font;
         ensureWrapCache(font);
+        IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.ROOT);
+
+        // 工具条：显式「应用 (Ctrl+Enter)」与「同步还原」按钮
+        Bounds tb = toolbarBounds();
+        IdeTheme.drawNineSlice(g, tb, IdeTheme.NineSlice.PANEL);
+        try (IdeScissor.Scope sc = IdeScissor.push(g, tb)) {
+            String applyTxt = Component.translatable("almightly_staff.ide.parse_apply").getString();
+            int applyW = font.width(applyTxt) + 20;
+            Bounds applyB = new Bounds(tb.x() + 4, tb.y() + 2, applyW, 14);
+            boolean hovA = applyB.contains(mouseX, mouseY);
+            IdeTheme.drawNineSlice(g, applyB, hasPendingDraft
+                ? IdeTheme.NineSlice.BTN_ACTIVE
+                : (hovA ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL));
+            IdeTheme.drawIcon(g, IdeTheme.Icon.CHECK_APPLY, applyB.x() + 4, applyB.y() + 3,
+                hasPendingDraft ? IdeTheme.GREEN_CAST : IdeTheme.TEXT_MAIN);
+            g.drawString(font, applyTxt, applyB.x() + 14, applyB.y() + 3, IdeTheme.TEXT_MAIN, false);
+
+            String revertTxt = Component.translatable("almightly_staff.ide.parse_revert").getString();
+            int revW = font.width(revertTxt) + 10;
+            Bounds revB = new Bounds(applyB.right() + 4, tb.y() + 2, revW, 14);
+            boolean hovR = revB.contains(mouseX, mouseY);
+            IdeTheme.drawNineSlice(g, revB, hovR ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL);
+            g.drawString(font, revertTxt, revB.x() + 5, revB.y() + 3, IdeTheme.TEXT_MUTED, false);
+        }
 
         Bounds body = editorBodyBounds();
         Bounds textArea = textContentBounds();
-        g.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BG_ROOT);
         g.fill(body.x(), body.y(), body.x() + GUTTER_W, body.bottom(), IdeTheme.BG_PANEL);
         g.fill(body.x() + GUTTER_W, body.y(), body.x() + GUTTER_W + 1, body.bottom(), IdeTheme.BORDER);
-
         if (focusManager.isFocused(this)) {
             IdeTheme.drawBorder(g, body, IdeTheme.ACCENT);
         }
@@ -288,7 +334,6 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         int selEnd = Math.max(cursor, selPos);
         int matchBrace = HexParseLexer.findMatchingBrace(code, cursor);
 
-        // Gutter + Text（仅遍历可见行区间）
         try (IdeScissor.Scope sc = IdeScissor.push(g, body.x(), body.y(), Math.max(0, body.w() - IdeTheme.SCROLLBAR_WIDTH), body.h())) {
             int lastLogical = -1;
             for (int vi = 0; vi < visible; vi++) {
@@ -300,15 +345,13 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                 if (errorLine > 0 && row.logicalLine() == errorLine) {
                     g.fill(textArea.x() - 2, y, textArea.right(), y + ROW_H, 0x33E05555);
                 }
-
                 if (row.logicalLine() != lastLogical) {
                     lastLogical = row.logicalLine();
                     String ln = Integer.toString(row.logicalLine());
                     int lnCol = (errorLine > 0 && row.logicalLine() == errorLine) ? IdeTheme.RED_ERROR : IdeTheme.TEXT_MUTED;
-                    g.drawString(font, ln, body.x() + GUTTER_W - font.width(ln) - 3, y + 1, lnCol, false);
+                    g.drawString(font, ln, body.x() + GUTTER_W - font.width(ln) - 3, y + 2, lnCol, false);
                 }
 
-                // 选区背景
                 if (selStart < selEnd && selEnd > row.startOffset() && selStart < row.endOffset()) {
                     int ls = Math.max(0, selStart - row.startOffset());
                     int le = Math.min(row.text().length(), selEnd - row.startOffset());
@@ -317,7 +360,6 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                     g.fill(sx1, y, sx2, y + ROW_H, 0x772E436E);
                 }
 
-                // 匹配括号高亮
                 if (matchBrace >= row.startOffset() && matchBrace < row.endOffset()) {
                     int local = matchBrace - row.startOffset();
                     int bx = textArea.x() + font.width(row.text().substring(0, local));
@@ -325,11 +367,9 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                     g.fill(bx, y, bx + bw, y + ROW_H, 0x559C6ADE);
                 }
 
-                // 词法着色渲染
-                renderHighlightedLine(g, font, row.text(), textArea.x(), y + 1);
+                renderHighlightedLine(g, font, row.text(), textArea.x(), y + 2);
             }
 
-            // 光标
             if (focusManager.isFocused(this)) {
                 int curRow = rowForOffset(cursor);
                 int vi = curRow - scrollRow;
@@ -338,7 +378,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                     int local = Mth.clamp(cursor - r.startOffset(), 0, r.text().length());
                     int cx = textArea.x() + font.width(r.text().substring(0, local));
                     int cy = textArea.y() + vi * ROW_H;
-                    g.fill(cx, cy, cx + 1, cy + ROW_H, 0xFFFF9E64);
+                    g.fill(cx, cy + 1, cx + 1, cy + ROW_H - 1, 0xFFFF9E64);
                 }
             }
         }
@@ -346,10 +386,8 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         IdeTheme.drawScrollbar(g, body.right() - IdeTheme.SCROLLBAR_WIDTH, body.y(), body.h(),
             cachedRows.size(), visible, scrollRow);
 
-        // 底部状态栏
         Bounds sb = new Bounds(bounds.x(), body.bottom(), bounds.w(), STATUS_H);
-        g.fill(sb.x(), sb.y(), sb.right(), sb.bottom(), IdeTheme.BG_PANEL);
-        g.fill(sb.x(), sb.y(), sb.right(), sb.y() + 1, IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, sb, IdeTheme.NineSlice.PANEL);
         try (IdeScissor.Scope sc = IdeScissor.push(g, sb)) {
             String statusMsg;
             int statusCol;
@@ -407,7 +445,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         int px = textArea.x() + font.width(r.text().substring(0, local));
         int py = textArea.y() + (vi + 1) * ROW_H;
 
-        int popW = 190;
+        int popW = 200;
         int popH = completions.size() * 14 + 4;
         int sw = Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int sh = Minecraft.getInstance().getWindow().getGuiScaledHeight();
@@ -418,8 +456,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         ps.pushPose();
         ps.translate(0.0F, 0.0F, 640.0F);
         try {
-            g.fill(px, py, px + popW, py + popH, IdeTheme.BG_ELEVATED);
-            IdeTheme.drawBorder(g, px, py, popW, popH, IdeTheme.ACCENT);
+            IdeTheme.drawNineSlice(g, px, py, popW, popH, IdeTheme.NineSlice.POPUP);
             for (int i = 0; i < completions.size(); i++) {
                 int iy = py + 2 + i * 14;
                 boolean sel = i == completionIdx;
@@ -439,11 +476,8 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         int s = cur;
         while (s > 0) {
             char c = code.charAt(s - 1);
-            if (Character.isLetterOrDigit(c) || c == '_' || c == ':' || c == '/') {
-                s--;
-            } else {
-                break;
-            }
+            if (Character.isLetterOrDigit(c) || c == '_' || c == ':' || c == '/') s--;
+            else break;
         }
         return code.substring(s, cur);
     }
@@ -495,21 +529,51 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (!bounds.contains(mx, my)) return false;
-        focusManager.focus(this);
-        if (button != 0) return true;
-        Bounds textArea = textContentBounds();
-        if (textArea.contains(mx, my)) {
+        Bounds tb = toolbarBounds();
+        if (tb.contains(mx, my) && button == 0) {
             Font font = Minecraft.getInstance().font;
-            ensureWrapCache(font);
-            int vi = Math.max(0, (int) ((my - textArea.y()) / ROW_H));
-            int rIdx = Math.min(cachedRows.size() - 1, scrollRow + vi);
-            WrappedRow row = cachedRows.get(rIdx);
-            int lx = Math.max(0, (int) (mx - textArea.x()));
-            int col = font.getSplitter().plainIndexAtWidth(row.text(), lx, Style.EMPTY);
-            helper.setCursorPos(Math.min(code.length(), row.startOffset() + col), false);
+            String applyTxt = Component.translatable("almightly_staff.ide.parse_apply").getString();
+            int applyW = font.width(applyTxt) + 20;
+            Bounds applyB = new Bounds(tb.x() + 4, tb.y() + 2, applyW, 14);
+            if (applyB.contains(mx, my)) {
+                applyParseToDocument();
+                return true;
+            }
+            String revertTxt = Component.translatable("almightly_staff.ide.parse_revert").getString();
+            int revW = font.width(revertTxt) + 10;
+            Bounds revB = new Bounds(applyB.right() + 4, tb.y() + 2, revW, 14);
+            if (revB.contains(mx, my) && boundDoc != null) {
+                requestCodeFromDocument(boundDoc);
+                return true;
+            }
+            return true;
+        }
+        focusManager.focus(this);
+        if (button == 0 && textContentBounds().contains(mx, my)) {
+            int offset = offsetAtPoint(Minecraft.getInstance().font, mx, my);
+            boolean extend = net.minecraft.client.gui.screens.Screen.hasShiftDown();
+            helper.setCursorPos(offset, extend);
+            draggingSelection = true;
             completionOpen = false;
         }
         return true;
+    }
+
+    @Override
+    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (button != 0 || !draggingSelection) return false;
+        int offset = offsetAtPoint(Minecraft.getInstance().font, mx, my);
+        helper.setCursorPos(offset, true);
+        return true;
+    }
+
+    @Override
+    public boolean mouseReleased(double mx, double my, int button) {
+        if (button == 0 && draggingSelection) {
+            draggingSelection = false;
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -526,6 +590,12 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (!focusManager.isFocused(this)) return false;
+        boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
+
+        if (ctrl && (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)) {
+            applyParseToDocument();
+            return true;
+        }
         if (completionOpen) {
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
                 completionOpen = false;
@@ -539,18 +609,17 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                 completionIdx = (completionIdx + 1) % completions.size();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_TAB || keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            if (keyCode == GLFW.GLFW_KEY_TAB) {
                 acceptCompletion();
                 return true;
             }
+            // Enter 不被补全劫持：关闭补全弹窗并正常换行
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             focusManager.clear();
             return true;
         }
         if (boundDoc != null && boundDoc.isSealed()) {
-            // 允许 Ctrl+C 与方向键查看，拦截修改按键
-            boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
             if (ctrl && (keyCode == GLFW.GLFW_KEY_C || keyCode == GLFW.GLFW_KEY_A)) {
                 return helper.keyPressed(keyCode);
             }
@@ -561,11 +630,12 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
             }
             return true;
         }
-        if ((modifiers & GLFW.GLFW_MOD_CONTROL) != 0 && keyCode == GLFW.GLFW_KEY_SPACE) {
+        if (ctrl && keyCode == GLFW.GLFW_KEY_SPACE) {
             updateCompletions();
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            completionOpen = false;
             helper.insertText("\n");
             ensureCursorVisible(Minecraft.getInstance().font);
             return true;
@@ -605,6 +675,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         if (!focusManager.isFocused(this)) return false;
         if (boundDoc != null && boundDoc.isSealed()) return true;
         if (codePoint == '\n' || codePoint == '\r') {
+            completionOpen = false;
             helper.insertText("\n");
             ensureCursorVisible(Minecraft.getInstance().font);
             return true;
@@ -617,21 +688,14 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
     }
 
     @Override
-    public void tick() {
-        if (debounceTicks > 0) {
-            debounceTicks--;
-            if (debounceTicks == 0) {
-                triggerParseSync();
-            }
+    public void onFocusLost() {
+        completionOpen = false;
+        if (hasPendingDraft) {
+            applyParseToDocument();
         }
     }
 
-    @Override
-    public void onFocusLost() {
-        completionOpen = false;
-    }
-
-    private void triggerParseSync() {
+    public void applyParseToDocument() {
         if (boundDoc == null || boundDoc.isSealed()) return;
         HexParseLexer.BracketReport br = HexParseLexer.checkBrackets(code);
         if (!br.balanced()) {
@@ -644,7 +708,6 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
             session.network().requestIdeParseToIotas(req, boundDoc.pageIndex(), code);
             return;
         }
-        // 未安装 HexParse 时降级：支持常见动作 ID、数字与内省/反思/考察字面量
         List<CompoundTag> parsed = parseOfflineFallback(code);
         if (parsed == null) {
             errorLine = 1;
@@ -653,6 +716,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         }
         errorLine = -1;
         errorText = "";
+        hasPendingDraft = false;
         if (boundDoc.replaceAll(parsed, "parse", true)) {
             onDocumentSynced.run();
         }
@@ -709,7 +773,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         return null;
     }
 
-    private static String formatTagsOffline(List<CompoundTag> tags) {
+    public static String formatTagsOffline(List<CompoundTag> tags) {
         if (tags == null || tags.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < tags.size(); i++) {

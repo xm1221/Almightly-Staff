@@ -13,6 +13,8 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.locale.Language;
 import net.minecraft.nbt.CompoundTag;
+import cn.xm1221.AlmightlyStaff.AlmightlyStaffConfig;
+import cn.xm1221.AlmightlyStaff.gui.ide.StaffIdeScreen;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
 import cn.xm1221.AlmightlyStaff.network.StaffSyncReceiver;
 import cn.xm1221.AlmightlyStaff.spell.PatternCatalogEntry;
@@ -372,6 +374,7 @@ public class StaffLibScreen extends Screen implements StaffSyncReceiver {
         deleteButton = addButton("almightly_staff.gui.delete", button -> requestDelete(), leftX, secondRowY, leftWidth);
 
         addButton("almightly_staff.gui.add_pattern", button -> addCatalogPattern(), middleX, firstRowY, middleWidth);
+        addButton("almightly_staff.gui.switch_ascode", button -> switchToAsCode(), middleX, secondRowY, middleWidth);
 
         int halfRight = Math.max(1, (rightWidth - gap) / 2);
         int rightSecondX = rightX + halfRight + gap;
@@ -388,6 +391,15 @@ public class StaffLibScreen extends Screen implements StaffSyncReceiver {
             .bounds(x, y, buttonWidth, 20).build();
         addRenderableWidget(button);
         return button;
+    }
+
+    private void switchToAsCode() {
+        flushRename();
+        AlmightlyStaffConfig.get().useIdeScreen = true;
+        AlmightlyStaffConfig.save();
+        if (minecraft != null) {
+            minecraft.setScreen(new StaffIdeScreen());
+        }
     }
 
     private void refreshFilter() {

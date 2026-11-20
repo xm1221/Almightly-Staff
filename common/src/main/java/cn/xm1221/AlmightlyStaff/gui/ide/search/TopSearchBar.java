@@ -20,12 +20,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 顶部 26px 固定工具栏 + 全局 Search Everywhere（Ctrl+K / 双击 Shift 唤醒，最高 Z-order 悬浮结果窗）。
+ * 20px 窄顶栏：全图标动作钮 + 悬停说明 + Ctrl+K 搜索框（窄宽度自动缩为放大镜图标，展开后弹最高层结果框）。
  */
 public final class TopSearchBar implements IdeComponent {
-    public static final int HEIGHT = 26;
+    public static final int HEIGHT = 20;
 
-    public record ActionButton(String id, IdeTheme.Icon icon, Component label, boolean primary, Runnable onClick) {
+    public record ActionButton(String id, IdeTheme.Icon icon, Component tooltip, Runnable onClick) {
     }
 
     private final SearchIndex index;
@@ -36,6 +36,7 @@ public final class TopSearchBar implements IdeComponent {
     private Bounds bounds = Bounds.EMPTY;
     private Bounds searchBoxBounds = Bounds.EMPTY;
     private final List<Bounds> actionBounds = new ArrayList<>();
+    private boolean compactSearch = false;
 
     private String query = "";
     private final TextFieldHelper helper;
@@ -83,7 +84,6 @@ public final class TopSearchBar implements IdeComponent {
         }
     }
 
-    /** 追踪双击 Shift（300ms 内连续两次松开 Shift 且无输入焦点冲突）。 */
     public boolean onShiftKeyEvent(int keyCode, int action) {
         if (keyCode != GLFW.GLFW_KEY_LEFT_SHIFT && keyCode != GLFW.GLFW_KEY_RIGHT_SHIFT) return false;
         if (action == GLFW.GLFW_RELEASE) {
@@ -111,85 +111,93 @@ public final class TopSearchBar implements IdeComponent {
     @Override
     public void layout(Bounds bounds) {
         this.bounds = bounds;
-        Font font = Minecraft.getInstance().font;
         actionBounds.clear();
 
-        int rightX = bounds.right() - 6;
+        int rightX = bounds.right() - 4;
         List<Bounds> reversed = new ArrayList<>();
         for (int i = actions.size() - 1; i >= 0; i--) {
-            ActionButton ab = actions.get(i);
-            int w = font.width(ab.label()) + 20;
-            int bx = rightX - w;
-            reversed.add(new Bounds(bx, bounds.y() + 4, w, 18));
-            rightX = bx - 4;
+            int bx = rightX - 16;
+            reversed.add(new Bounds(bx, bounds.y() + 2, 16, 16));
+            rightX = bx - 3;
         }
         for (int i = reversed.size() - 1; i >= 0; i--) {
             actionBounds.add(reversed.get(i));
         }
 
-        int brandW = 112;
+        int brandW = 68;
         int sx = bounds.x() + brandW;
-        int maxRight = Math.max(sx + 80, rightX - 6);
-        int sw = Math.min(340, Math.max(80, maxRight - sx));
-        searchBoxBounds = new Bounds(sx, bounds.y() + 4, sw, 18);
+        int avail = rightX - sx - 6;
+        compactSearch = avail < 110 && !focusManager.isFocused(this);
+        if (compactSearch) {
+            searchBoxBounds = new Bounds(sx, bounds.y() + 2, 16, 16);
+        } else {
+            int sw = Math.min(280, Math.max(96, avail));
+            searchBoxBounds = new Bounds(sx, bounds.y() + 2, sw, 16);
+        }
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         if (bounds.isEmpty()) return;
         Font font = Minecraft.getInstance().font;
-        g.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BG_PANEL);
-        g.fill(bounds.x(), bounds.bottom() - 1, bounds.right(), bounds.bottom(), IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.HEADER);
 
         try (IdeScissor.Scope sc = IdeScissor.push(g, bounds)) {
-            // Brand
-            g.fill(bounds.x() + 8, bounds.y() + 8, bounds.x() + 16, bounds.y() + 16, IdeTheme.ACCENT);
-            g.fill(bounds.x() + 10, bounds.y() + 10, bounds.x() + 14, bounds.y() + 14, IdeTheme.ACCENT_LIGHT);
+            IdeTheme.drawIcon(g, IdeTheme.Icon.SPELL_STAR, bounds.x() + 6, bounds.y() + 6, IdeTheme.ACCENT_LIGHT);
             g.drawString(font, Component.translatable("almightly_staff.ide.brand"),
-                bounds.x() + 20, bounds.y() + 9, IdeTheme.TEXT_MAIN, false);
+                bounds.x() + 17, bounds.y() + 6, IdeTheme.TEXT_MAIN, false);
 
-            // Search Input
             boolean focused = focusManager.isFocused(this);
-            g.fill(searchBoxBounds.x(), searchBoxBounds.y(), searchBoxBounds.right(), searchBoxBounds.bottom(), IdeTheme.BG_ROOT);
-            IdeTheme.drawBorder(g, searchBoxBounds, focused ? IdeTheme.ACCENT : IdeTheme.BORDER_STRONG);
-            IdeTheme.drawIcon(g, IdeTheme.Icon.SEARCH_GLASS, searchBoxBounds.x() + 5, searchBoxBounds.y() + 5, IdeTheme.TEXT_MUTED);
+            if (compactSearch && !focused) {
+                boolean hov = searchBoxBounds.contains(mouseX, mouseY);
+                IdeTheme.drawNineSlice(g, searchBoxBounds, hov ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL);
+                IdeTheme.drawIcon(g, IdeTheme.Icon.SEARCH_GLASS, searchBoxBounds.x() + 4, searchBoxBounds.y() + 4, IdeTheme.TEXT_MAIN);
+            } else {
+                IdeTheme.drawNineSlice(g, searchBoxBounds, IdeTheme.NineSlice.INPUT);
+                if (focused) IdeTheme.drawBorder(g, searchBoxBounds, IdeTheme.ACCENT);
+                IdeTheme.drawIcon(g, IdeTheme.Icon.SEARCH_GLASS, searchBoxBounds.x() + 4, searchBoxBounds.y() + 4, IdeTheme.TEXT_MUTED);
 
-            try (IdeScissor.Scope s2 = IdeScissor.push(g, searchBoxBounds.inset(15, 2, 34, 2))) {
-                String shown = query.isEmpty() && !focused
-                    ? Component.translatable("almightly_staff.ide.search_placeholder").getString()
-                    : query;
-                int col = query.isEmpty() && !focused ? IdeTheme.TEXT_MUTED : IdeTheme.TEXT_MAIN;
-                g.drawString(font, shown, searchBoxBounds.x() + 16, searchBoxBounds.y() + 5, col, false);
-                if (focused) {
-                    int cur = Math.min(helper.getCursorPos(), query.length());
-                    int cx = searchBoxBounds.x() + 16 + font.width(query.substring(0, cur));
-                    g.fill(cx, searchBoxBounds.y() + 3, cx + 1, searchBoxBounds.bottom() - 3, IdeTheme.ACCENT_LIGHT);
+                try (IdeScissor.Scope s2 = IdeScissor.push(g, searchBoxBounds.inset(14, 1, 32, 1))) {
+                    String shown = query.isEmpty() && !focused
+                        ? Component.translatable("almightly_staff.ide.search_placeholder").getString()
+                        : query;
+                    int col = query.isEmpty() && !focused ? IdeTheme.TEXT_MUTED : IdeTheme.TEXT_MAIN;
+                    g.drawString(font, shown, searchBoxBounds.x() + 14, searchBoxBounds.y() + 4, col, false);
+                    if (focused) {
+                        int cur = Math.min(helper.getCursorPos(), query.length());
+                        int cx = searchBoxBounds.x() + 14 + font.width(query.substring(0, cur));
+                        g.fill(cx, searchBoxBounds.y() + 3, cx + 1, searchBoxBounds.bottom() - 3, IdeTheme.ACCENT_LIGHT);
+                    }
                 }
+                g.drawString(font, "Ctrl+K", searchBoxBounds.right() - 31, searchBoxBounds.y() + 4, IdeTheme.TEXT_MUTED, false);
             }
-            g.drawString(font, "Ctrl+K", searchBoxBounds.right() - 33, searchBoxBounds.y() + 5, IdeTheme.TEXT_MUTED, false);
 
-            // Action Buttons
             for (int i = 0; i < actions.size() && i < actionBounds.size(); i++) {
                 ActionButton ab = actions.get(i);
                 Bounds abBounds = actionBounds.get(i);
                 boolean hov = abBounds.contains(mouseX, mouseY);
-                int fill = ab.primary()
-                    ? (hov ? 0x669C6ADE : IdeTheme.ACCENT_SOFT)
-                    : (hov ? IdeTheme.BG_HOVER : IdeTheme.BG_ELEVATED);
-                int border = ab.primary() ? IdeTheme.ACCENT : IdeTheme.BORDER_STRONG;
-                g.fill(abBounds.x(), abBounds.y(), abBounds.right(), abBounds.bottom(), fill);
-                IdeTheme.drawBorder(g, abBounds, border);
-                IdeTheme.drawIcon(g, ab.icon(), abBounds.x() + 5, abBounds.y() + 5,
-                    ab.primary() ? IdeTheme.ACCENT_LIGHT : IdeTheme.TEXT_MAIN);
-                g.drawString(font, ab.label(), abBounds.x() + 16, abBounds.y() + 5, IdeTheme.TEXT_MAIN, false);
+                IdeTheme.drawNineSlice(g, abBounds, hov ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL);
+                IdeTheme.drawIcon(g, ab.icon(), abBounds.x() + 4, abBounds.y() + 4, IdeTheme.TEXT_MAIN);
             }
         }
     }
 
     @Override
     public void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        if (!popupOpen || !focusManager.isFocused(this)) return;
         Font font = Minecraft.getInstance().font;
+        if (!popupOpen && bounds.contains(mouseX, mouseY)) {
+            if (compactSearch && searchBoxBounds.contains(mouseX, mouseY)) {
+                g.renderTooltip(font, Component.literal("Ctrl+K"), mouseX, mouseY);
+                return;
+            }
+            for (int i = 0; i < actions.size() && i < actionBounds.size(); i++) {
+                if (actionBounds.get(i).contains(mouseX, mouseY)) {
+                    g.renderTooltip(font, actions.get(i).tooltip(), mouseX, mouseY);
+                    return;
+                }
+            }
+        }
+        if (!popupOpen || !focusManager.isFocused(this)) return;
         int popX = searchBoxBounds.x();
         int popY = searchBoxBounds.bottom() + 2;
         int popW = Math.max(260, searchBoxBounds.w());
@@ -201,10 +209,7 @@ public final class TopSearchBar implements IdeComponent {
         ps.pushPose();
         ps.translate(0.0F, 0.0F, 660.0F);
         try {
-            g.fill(popX - 1, popY - 1, popX + popW + 1, popY + popH + 1, 0xEE080A0D);
-            g.fill(popX, popY, popX + popW, popY + popH, IdeTheme.BG_PANEL);
-            IdeTheme.drawBorder(g, popX, popY, popW, popH, IdeTheme.ACCENT);
-
+            IdeTheme.drawNineSlice(g, popX, popY, popW, popH, IdeTheme.NineSlice.POPUP);
             if (results.isEmpty()) {
                 g.drawString(font, Component.translatable("almightly_staff.ide.search_empty"),
                     popX + 8, popY + 6, IdeTheme.TEXT_MUTED, false);
@@ -215,9 +220,8 @@ public final class TopSearchBar implements IdeComponent {
                 int ry = popY + 2 + i * rowH;
                 boolean sel = i == selectedIdx;
                 boolean hov = mouseX >= popX && mouseX < popX + popW && mouseY >= ry && mouseY < ry + rowH;
-                if (sel || hov) {
-                    g.fill(popX + 1, ry, popX + popW - 1, ry + rowH, IdeTheme.BG_ACTIVE);
-                }
+                if (sel || hov) g.fill(popX + 1, ry, popX + popW - 1, ry + rowH, IdeTheme.BG_ACTIVE);
+
                 int textX = popX + 8;
                 if (e.kind() == SearchIndex.Kind.PATTERN && !e.patternSig().isBlank()) {
                     StaffHex.renderPattern(new PatternRef(e.patternActionId(), e.patternDir(), e.patternSig()),
@@ -283,9 +287,7 @@ public final class TopSearchBar implements IdeComponent {
 
     private void executeMatch(SearchIndex.Entry entry) {
         closeSearch();
-        if (entry != null && entry.action() != null) {
-            entry.action().run();
-        }
+        if (entry != null && entry.action() != null) entry.action().run();
     }
 
     @Override

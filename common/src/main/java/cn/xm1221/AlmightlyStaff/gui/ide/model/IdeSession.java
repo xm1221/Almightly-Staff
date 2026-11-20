@@ -67,6 +67,10 @@ public final class IdeSession {
     private int pendingGreatPage;
     private int pendingGreatInsertIndex = -1;
 
+    // 导出 / 复制 HexParse 代码请求回调 (requestId -> Consumer<String>)
+    private int utilityReqSeq = 700000;
+    private final Map<Integer, java.util.function.Consumer<String>> codeActionCallbacks = new HashMap<>();
+
     public IdeSession(StaffNetworkBridge network, IdeWorkspaceStorage storage, ToastOverlay toast) {
         this.network = network;
         this.storage = storage;
@@ -351,7 +355,28 @@ public final class IdeSession {
         }
     }
 
+    public void requestCodeForAction(int pageIndex, java.util.function.Consumer<String> onCodeReady) {
+        SpellDocument doc = documents.get(pageIndex);
+        if (doc == null) return;
+        if (dev.architectury.platform.Platform.isModLoaded("hexparse")) {
+            int req = ++utilityReqSeq;
+            codeActionCallbacks.put(req, onCodeReady);
+            network.requestIdeParseToCode(req, pageIndex, doc.copyIotas());
+        } else {
+            onCodeReady.accept(cn.xm1221.AlmightlyStaff.gui.ide.tool.HexParseEditorPanel.formatTagsOffline(doc.iotasView()));
+        }
+    }
+
     public void onIdeParseToCode(int requestId, int pageIndex, String code, String error) {
+        java.util.function.Consumer<String> cb = codeActionCallbacks.remove(requestId);
+        if (cb != null) {
+            if (error != null && !error.isEmpty()) {
+                toast.showError(error);
+            } else {
+                cb.accept(code == null ? "" : code);
+            }
+            return;
+        }
         for (Listener l : List.copyOf(listeners)) {
             l.onParseToCodeResult(requestId, pageIndex, code, error);
         }

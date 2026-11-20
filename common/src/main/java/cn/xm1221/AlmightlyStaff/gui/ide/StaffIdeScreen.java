@@ -1,12 +1,9 @@
 package cn.xm1221.AlmightlyStaff.gui.ide;
 
 import at.petrak.hexcasting.api.casting.eval.ExecutionClientView;
-import at.petrak.hexcasting.api.casting.iota.Iota;
 import at.petrak.hexcasting.api.casting.iota.IotaType;
-import at.petrak.hexcasting.api.casting.iota.ListIota;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffConfig;
-import cn.xm1221.AlmightlyStaff.gui.StaffCastScreen;
 import cn.xm1221.AlmightlyStaff.gui.StaffDrawScreen;
 import cn.xm1221.AlmightlyStaff.gui.StaffLibScreen;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.Bounds;
@@ -16,15 +13,14 @@ import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeComponent;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeScissor;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeTheme;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.ToastOverlay;
-import cn.xm1221.AlmightlyStaff.gui.ide.editor.EditorArea;
+import cn.xm1221.AlmightlyStaff.gui.ide.editor.IotaTextEditorView;
 import cn.xm1221.AlmightlyStaff.gui.ide.editor.SequenceEditorView;
 import cn.xm1221.AlmightlyStaff.gui.ide.editor.TabItem;
 import cn.xm1221.AlmightlyStaff.gui.ide.host.EmbeddedScreenHost;
 import cn.xm1221.AlmightlyStaff.gui.ide.host.MarkdownNotePanel;
 import cn.xm1221.AlmightlyStaff.gui.ide.host.PatchouliHostBridge;
-import cn.xm1221.AlmightlyStaff.gui.ide.layout.DockNode;
+import cn.xm1221.AlmightlyStaff.gui.ide.layout.DockWorkspace;
 import cn.xm1221.AlmightlyStaff.gui.ide.layout.FloatingWindow;
-import cn.xm1221.AlmightlyStaff.gui.ide.layout.SplitterDragState;
 import cn.xm1221.AlmightlyStaff.gui.ide.layout.ToolWindowStripe;
 import cn.xm1221.AlmightlyStaff.gui.ide.layout.WindowManager;
 import cn.xm1221.AlmightlyStaff.gui.ide.model.IdeSession;
@@ -33,7 +29,7 @@ import cn.xm1221.AlmightlyStaff.gui.ide.model.SpellDocument;
 import cn.xm1221.AlmightlyStaff.gui.ide.model.WorkspaceState;
 import cn.xm1221.AlmightlyStaff.gui.ide.search.SearchIndex;
 import cn.xm1221.AlmightlyStaff.gui.ide.search.TopSearchBar;
-import cn.xm1221.AlmightlyStaff.gui.ide.tool.BottomToolDock;
+import cn.xm1221.AlmightlyStaff.gui.ide.tool.CastCollectPanel;
 import cn.xm1221.AlmightlyStaff.gui.ide.tool.HexGridPanel;
 import cn.xm1221.AlmightlyStaff.gui.ide.tool.HexParseEditorPanel;
 import cn.xm1221.AlmightlyStaff.gui.ide.tool.PageTreePanel;
@@ -45,6 +41,7 @@ import cn.xm1221.AlmightlyStaff.spell.PatternCatalogEntry;
 import cn.xm1221.AlmightlyStaff.spell.PatternRef;
 import cn.xm1221.AlmightlyStaff.spell.StaffHex;
 import dev.architectury.platform.Platform;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.nbt.CompoundTag;
@@ -53,13 +50,16 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 万法之杖 IDEA 风格主编辑器界面（1.20.1 Common Core）。
+ * 万法之杖现代停靠式法术 IDE 主界面（Minecraft 1.20.1 Common）。
  */
 public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, IdeSession.Listener {
     private static final int STATUSBAR_H = 18;
+    private static final int SNIPPET_REQ_BASE = 888000;
 
     private final ToastOverlay toast = new ToastOverlay();
     private final ContextMenuOverlay contextMenu = new ContextMenuOverlay();
@@ -69,165 +69,209 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
 
     private final SearchIndex searchIndex = new SearchIndex();
     private final TopSearchBar topSearchBar;
-    private final ToolWindowStripe leftStripe = new ToolWindowStripe();
+    private final ToolWindowStripe leftStripe = new ToolWindowStripe(false);
+    private final ToolWindowStripe rightStripe = new ToolWindowStripe(true);
+    private final WindowManager windowManager = new WindowManager();
+    private final DockWorkspace dockWorkspace;
+
+    private final IotaTextEditorView iotaTextView;
+    private final SequenceGridHost sequenceGridHost = new SequenceGridHost();
     private final PageTreePanel treePanel;
-    private final EditorArea editorArea;
     private final HexGridPanel hexGridPanel;
     private final HexParseEditorPanel hexParsePanel;
-    private final BottomToolDock bottomDock;
     private final PatternCatalogPanel catalogPanel;
-    private final WindowManager windowManager = new WindowManager();
-
-    private final DockNode.LeafNode treeLeaf = new DockNode.LeafNode("tree");
-    private final DockNode.LeafNode editorLeaf = new DockNode.LeafNode("editor");
-    private final DockNode.LeafNode bottomLeaf = new DockNode.LeafNode("bottom");
-    private final DockNode.LeafNode catalogLeaf = new DockNode.LeafNode("catalog");
-
-    private DockNode.SplitNode centerColSplit;
-    private DockNode.SplitNode rightSplit;
-    private DockNode.SplitNode rootSplit;
-    private final SplitterDragState splitterDrag = new SplitterDragState();
-    private Bounds dockBounds = Bounds.EMPTY;
+    private final CastCollectPanel castCollectPanel;
 
     private boolean syncRequested = false;
     private boolean workspaceApplied = false;
-    private int floatingCounter = 0;
+    private int snippetReqSeq = SNIPPET_REQ_BASE;
+    private int pendingSnippetReq = -1;
+    private int pendingSnippetPage = -1;
 
     public StaffIdeScreen() {
         super(Component.translatable("almightly_staff.ide.title"));
         this.session.addListener(this);
 
+        this.dockWorkspace = new DockWorkspace(windowManager, this::persistLayoutState, this::onDynamicWindowClosed);
         this.topSearchBar = new TopSearchBar(searchIndex, focusManager, this::rebuildSearchIndex);
-        this.editorArea = new EditorArea(new EditorCallbacksImpl());
-        this.hexGridPanel = new HexGridPanel(session, tags -> insertTagsIntoActiveEditor(tags, "grid"));
+        this.iotaTextView = new IotaTextEditorView(session, focusManager, new TextViewCallbacks());
+        this.hexGridPanel = new HexGridPanel(session, tags -> iotaTextView.insertTagsAtCursor(tags, "grid"));
         this.hexParsePanel = new HexParseEditorPanel(session, focusManager,
             () -> {
-                SpellDocument doc = editorArea.activeSpellDocument();
+                SpellDocument doc = iotaTextView.activeDocument();
                 if (doc != null) session.saveDocument(doc);
             });
-        this.bottomDock = new BottomToolDock(hexGridPanel, hexParsePanel, 0.42f, "split");
+        this.castCollectPanel = new CastCollectPanel(session, collected -> {
+            if (collected == null || collected.isEmpty()) return;
+            iotaTextView.insertTagsAtCursor(collected, "cast");
+            toast.show(Component.translatable("almightly_staff.gui.stack_collected", collected.size()).getString());
+        });
         this.treePanel = new PageTreePanel(session, focusManager, new TreeCallbacksImpl());
         this.catalogPanel = new PatternCatalogPanel(session, focusManager,
-            editorArea::activeSpellDocument,
+            iotaTextView::activeDocument,
             this::insertCatalogEntryAtCursor,
-            this::dropCatalogEntry);
+            (entry, xy) -> {
+                if (iotaTextView.bounds().contains(xy[0], xy[1])) {
+                    insertCatalogEntryAtCursor(entry);
+                } else {
+                    sequenceGridHost.acceptCatalogDrop(entry, xy[0], xy[1]);
+                }
+            });
 
-        buildDockTree(WorkspaceState.createDefault());
+        registerWindows();
         buildStripeButtons();
         buildTopActions();
+        dockWorkspace.applyWorkspace(WorkspaceState.createDefault());
     }
 
-    private void buildDockTree(WorkspaceState ws) {
-        WorkspaceState.LayoutState l = ws.layout;
-        treeLeaf.setCollapsed(l.leftCollapsed);
-        bottomLeaf.setCollapsed(l.bottomCollapsed);
-        catalogLeaf.setCollapsed(l.catalogCollapsed);
-
-        centerColSplit = new DockNode.SplitNode("center_col", DockNode.Axis.VERTICAL,
-            1.0f - l.bottomRatio, 100, 100, editorLeaf, bottomLeaf);
-        rightSplit = new DockNode.SplitNode("right_area", DockNode.Axis.HORIZONTAL,
-            1.0f - l.catalogRatio, 180, 120, centerColSplit, catalogLeaf);
-        rootSplit = new DockNode.SplitNode("root", DockNode.Axis.HORIZONTAL,
-            l.leftRatio, 110, 220, treeLeaf, rightSplit);
-        bottomDock.setMode(l.bottomMode);
+    private void registerWindows() {
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            "iota_text",
+            Component.translatable("almightly_staff.ide.win_iota_text"),
+            IdeTheme.Icon.SPELL_STAR,
+            iotaTextView, 220, 140, false
+        ));
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            "hex_grid",
+            Component.translatable("almightly_staff.ide.win_hex_grid"),
+            IdeTheme.Icon.HEX_GRID_ICON,
+            hexGridPanel, 180, 140, false
+        ));
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            "page_tree",
+            Component.translatable("almightly_staff.ide.win_page_tree"),
+            IdeTheme.Icon.FOLDER_CLOSED,
+            treePanel, 160, 140, false
+        ));
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            "hex_parse",
+            Component.translatable("almightly_staff.ide.win_hex_parse"),
+            IdeTheme.Icon.HEX_PARSE_ICON,
+            hexParsePanel, 220, 130, false
+        ));
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            "pattern_catalog",
+            Component.translatable("almightly_staff.ide.win_catalog"),
+            IdeTheme.Icon.SPELL_STAR,
+            catalogPanel, 180, 140, false
+        ));
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            "cast_collect",
+            Component.translatable("almightly_staff.ide.win_cast_collect"),
+            IdeTheme.Icon.PLAY_CAST,
+            castCollectPanel, 240, 160, false
+        ));
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            "sequence_grid",
+            Component.translatable("almightly_staff.ide.win_sequence_grid"),
+            IdeTheme.Icon.SPLIT_VIEW,
+            sequenceGridHost, 180, 130, true
+        ));
     }
 
     private void buildStripeButtons() {
-        leftStripe.addButton(new ToolWindowStripe.StripeButton(
-            "tree", IdeTheme.Icon.FOLDER_CLOSED,
-            Component.translatable("almightly_staff.ide.toggle_tree"),
-            () -> !treeLeaf.isCollapsed(),
-            () -> toggleLeaf(treeLeaf)
-        ));
-        leftStripe.addButton(new ToolWindowStripe.StripeButton(
-            "bottom", IdeTheme.Icon.SPLIT_VIEW,
-            Component.translatable("almightly_staff.ide.toggle_bottom"),
-            () -> !bottomLeaf.isCollapsed(),
-            () -> toggleLeaf(bottomLeaf)
-        ));
-        leftStripe.addButton(new ToolWindowStripe.StripeButton(
-            "catalog", IdeTheme.Icon.SPELL_STAR,
-            Component.translatable("almightly_staff.ide.toggle_catalog"),
-            () -> !catalogLeaf.isCollapsed(),
-            () -> toggleLeaf(catalogLeaf)
-        ));
+        leftStripe.addButton(stripeButton("page_tree", IdeTheme.Icon.FOLDER_CLOSED, "almightly_staff.ide.win_page_tree"));
+        leftStripe.addButton(stripeButton("hex_grid", IdeTheme.Icon.HEX_GRID_ICON, "almightly_staff.ide.win_hex_grid"));
+        leftStripe.addButton(stripeButton("hex_parse", IdeTheme.Icon.HEX_PARSE_ICON, "almightly_staff.ide.win_hex_parse"));
+
+        rightStripe.addButton(stripeButton("pattern_catalog", IdeTheme.Icon.SPELL_STAR, "almightly_staff.ide.win_catalog"));
+        rightStripe.addButton(stripeButton("cast_collect", IdeTheme.Icon.PLAY_CAST, "almightly_staff.ide.win_cast_collect"));
+        rightStripe.addButton(stripeButton("sequence_grid", IdeTheme.Icon.SPLIT_VIEW, "almightly_staff.ide.win_sequence_grid"));
+    }
+
+    private ToolWindowStripe.StripeButton stripeButton(String winId, IdeTheme.Icon icon, String langKey) {
+        return new ToolWindowStripe.StripeButton(
+            winId, icon, Component.translatable(langKey),
+            () -> dockWorkspace.isOpen(winId),
+            () -> dockWorkspace.isMinimized(winId),
+            () -> dockWorkspace.toggleFromStripe(winId)
+        );
     }
 
     private void buildTopActions() {
         topSearchBar.addAction(new TopSearchBar.ActionButton(
-            "split", IdeTheme.Icon.SPLIT_VIEW,
-            Component.translatable("almightly_staff.ide.btn_split"), false,
-            () -> editorArea.toggleSplit(this::defaultFallbackTab)
+            "save", IdeTheme.Icon.SAVE_DISK,
+            Component.translatable("almightly_staff.ide.btn_save"),
+            this::saveAll
         ));
         topSearchBar.addAction(new TopSearchBar.ActionButton(
-            "float_note", IdeTheme.Icon.FLOAT_WIN,
-            Component.translatable("almightly_staff.ide.btn_float_note"), false,
-            this::openFloatingNote
+            "note", IdeTheme.Icon.NOTE_DOC,
+            Component.translatable("almightly_staff.ide.btn_float_note"),
+            this::openDefaultNote
         ));
         if (Platform.isModLoaded("patchouli")) {
             topSearchBar.addAction(new TopSearchBar.ActionButton(
                 "patchouli", IdeTheme.Icon.BOOK_EXTERNAL,
-                Component.translatable("almightly_staff.ide.btn_patchouli"), false,
-                this::openPatchouliInTab
+                Component.translatable("almightly_staff.ide.btn_patchouli"),
+                this::openPatchouliWindow
             ));
         }
         topSearchBar.addAction(new TopSearchBar.ActionButton(
-            "reset", IdeTheme.Icon.DOCK_BACK,
-            Component.translatable("almightly_staff.ide.btn_reset_layout"), false,
-            this::resetLayout
-        ));
-        topSearchBar.addAction(new TopSearchBar.ActionButton(
-            "save", IdeTheme.Icon.SAVE_DISK,
-            Component.translatable("almightly_staff.ide.btn_save"), true,
-            this::saveAll
+            "more", IdeTheme.Icon.MORE_DOTS,
+            Component.translatable("almightly_staff.ide.overflow_menu"),
+            this::openOverflowMenu
         ));
     }
 
-    private void toggleLeaf(DockNode.LeafNode leaf) {
-        leaf.setCollapsed(!leaf.isCollapsed());
-        layoutAll();
+    private void openOverflowMenu() {
+        List<ContextMenuOverlay.MenuItem> items = new ArrayList<>();
+        items.add(new ContextMenuOverlay.MenuItem(
+            Component.translatable("almightly_staff.ide.open_sequence_grid"), true,
+            () -> dockWorkspace.openOrFocus("sequence_grid")
+        ));
+        items.add(new ContextMenuOverlay.MenuItem(
+            Component.translatable("almightly_staff.ide.btn_reset_layout"), true,
+            this::resetLayout
+        ));
+        items.add(new ContextMenuOverlay.MenuItem(
+            Component.translatable("almightly_staff.ide.switch_legacy"), true,
+            this::switchToLegacyUi
+        ));
+        contextMenu.open(Math.max(4, width - 150), TopSearchBar.HEIGHT + 2, width, height, font, items);
+    }
+
+    private void switchToLegacyUi() {
+        iotaTextView.commitNameEdit();
         persistLayoutState();
+        session.saveAllDirty();
+        AlmightlyStaffConfig.get().useIdeScreen = false;
+        AlmightlyStaffConfig.save();
+        if (minecraft != null) {
+            minecraft.setScreen(new StaffLibScreen());
+        }
     }
 
     private void resetLayout() {
         WorkspaceState def = WorkspaceState.createDefault();
-        buildDockTree(def);
-        editorArea.setSplitState(false, 0.50f, false);
-        layoutAll();
+        dockWorkspace.applyWorkspace(def);
         persistLayoutState();
         toast.show(Component.translatable("almightly_staff.ide.layout_reset").getString());
     }
 
     private void saveAll() {
+        iotaTextView.commitNameEdit();
         persistLayoutState();
         session.saveAllDirty();
     }
 
     private void persistLayoutState() {
-        WorkspaceState.LayoutState l = session.workspace().layout;
-        l.leftRatio = rootSplit.ratio();
-        l.catalogRatio = 1.0f - rightSplit.ratio();
-        l.bottomRatio = 1.0f - centerColSplit.ratio();
-        l.bottomInnerRatio = bottomDock.splitRatio();
-        l.editorSplitRatio = editorArea.splitRatio();
-        l.leftCollapsed = treeLeaf.isCollapsed();
-        l.catalogCollapsed = catalogLeaf.isCollapsed();
-        l.bottomCollapsed = bottomLeaf.isCollapsed();
-        l.editorSplitOpen = editorArea.isSplitOpen();
-        l.bottomMode = bottomDock.mode();
-
+        dockWorkspace.saveToWorkspace(session.workspace());
         session.workspace().openTabs.clear();
-        for (TabItem t : editorArea.primary().tabs()) {
-            if (t instanceof TabItem.SpellTab st) {
-                session.workspace().openTabs.add(new WorkspaceState.TabBookmark("spell", st.document().pageIndex(), "", 0));
-            }
+        for (IotaTextEditorView.PageTabState st : iotaTextView.openTabs()) {
+            session.workspace().openTabs.add(new WorkspaceState.TabBookmark("spell", st.pageIndex, "", 0));
+        }
+    }
+
+    private void onDynamicWindowClosed(String windowId) {
+        if (windowId.startsWith("note:") || windowId.startsWith("ext:")) {
+            dockWorkspace.unregisterWindow(windowId);
         }
     }
 
     @Override
     protected void init() {
         layoutAll();
-        windowManager.clampAll(width, height, TopSearchBar.HEIGHT);
+        windowManager.clampAll(dockWorkspace.dockBounds());
         if (!syncRequested) {
             syncRequested = true;
             session.requestSync();
@@ -238,13 +282,15 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
         topSearchBar.layout(new Bounds(0, 0, width, TopSearchBar.HEIGHT));
         int bodyH = Math.max(0, height - TopSearchBar.HEIGHT - STATUSBAR_H);
         leftStripe.layout(new Bounds(0, TopSearchBar.HEIGHT, ToolWindowStripe.WIDTH, bodyH));
-        dockBounds = new Bounds(ToolWindowStripe.WIDTH, TopSearchBar.HEIGHT,
-            Math.max(0, width - ToolWindowStripe.WIDTH), bodyH);
-        rootSplit.layout(dockBounds);
-        treePanel.layout(treeLeaf.bounds());
-        editorArea.layout(editorLeaf.bounds());
-        bottomDock.layout(bottomLeaf.bounds());
-        catalogPanel.layout(catalogLeaf.bounds());
+        rightStripe.layout(new Bounds(Math.max(0, width - ToolWindowStripe.WIDTH), TopSearchBar.HEIGHT,
+            ToolWindowStripe.WIDTH, bodyH));
+        Bounds dockArea = new Bounds(
+            ToolWindowStripe.WIDTH,
+            TopSearchBar.HEIGHT,
+            Math.max(0, width - ToolWindowStripe.WIDTH * 2),
+            bodyH
+        );
+        dockWorkspace.layout(dockArea);
     }
 
     // ==================== 同步与回调 ====================
@@ -270,6 +316,21 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
     @Override
     public void onIdeParseToIotas(int requestId, int pageIndex, boolean ok,
                                   List<CompoundTag> iotaTags, String error, int errorLine) {
+        if (requestId == pendingSnippetReq) {
+            pendingSnippetReq = -1;
+            if (!ok || iotaTags == null || iotaTags.isEmpty()) {
+                toast.showError(error == null || error.isEmpty()
+                    ? Component.translatable("almightly_staff.gui.hexparse_error").getString()
+                    : error);
+                return;
+            }
+            if (iotaTextView.activeDocument() == null || iotaTextView.activeDocument().pageIndex() != pendingSnippetPage) {
+                iotaTextView.openOrFocusPage(pendingSnippetPage);
+            }
+            iotaTextView.insertTagsAtCursor(iotaTags, "note");
+            toast.show(Component.translatable("almightly_staff.ide.applied_snippet").getString());
+            return;
+        }
         session.onIdeParseToIotas(requestId, pageIndex, ok, iotaTags, error, errorLine);
     }
 
@@ -277,41 +338,38 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
     public void onFullSync(int focusPage) {
         if (!workspaceApplied) {
             workspaceApplied = true;
-            buildDockTree(session.workspace());
-            if (session.workspace().layout.editorSplitOpen) {
-                editorArea.setSplitState(true, session.workspace().layout.editorSplitRatio, false);
-            }
+            dockWorkspace.applyWorkspace(session.workspace());
             layoutAll();
             for (WorkspaceState.TabBookmark bm : session.workspace().openTabs) {
                 if ("spell".equals(bm.kind) && session.document(bm.pageIndex) != null) {
-                    openSpellPage(bm.pageIndex, false);
+                    iotaTextView.openOrFocusPage(bm.pageIndex);
                 }
             }
         }
         int target = focusPage > 0 ? focusPage
-            : (editorArea.activeSpellDocument() != null ? editorArea.activeSpellDocument().pageIndex() : session.castPage());
+            : (iotaTextView.activeDocument() != null ? iotaTextView.activeDocument().pageIndex() : session.castPage());
         if (session.document(target) == null && !session.documents().isEmpty()) {
             target = session.documents().iterator().next().pageIndex();
         }
-        if (target > 0 && session.document(target) != null && editorArea.primary().tabs().isEmpty()) {
-            openSpellPage(target, false);
+        if (target > 0 && session.document(target) != null && iotaTextView.openTabs().isEmpty()) {
+            iotaTextView.openOrFocusPage(target);
         } else if (focusPage > 0 && session.document(focusPage) != null) {
-            openSpellPage(focusPage, false);
+            iotaTextView.openOrFocusPage(focusPage);
         }
-        hexParsePanel.bindDocument(editorArea.activeSpellDocument(), true);
+        syncSideEditors(true);
     }
 
     @Override
     public void onPagesUpdated(int focusPage, List<Integer> removed) {
         if (removed != null) {
             for (int r : removed) {
-                editorArea.closeSpellPageEverywhere(r);
+                iotaTextView.closePage(r);
             }
         }
         if (focusPage > 0 && session.document(focusPage) != null) {
-            openSpellPage(focusPage, false);
+            iotaTextView.openOrFocusPage(focusPage);
         }
-        hexParsePanel.bindDocument(editorArea.activeSpellDocument(), false);
+        syncSideEditors(false);
     }
 
     @Override
@@ -320,144 +378,113 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
     }
 
     public void onSpellcastingServerUpdate(ExecutionClientView info, int index) {
-        hexGridPanel.onServerUpdate(info, index);
+        castCollectPanel.onServerUpdate(info, index);
+    }
+
+    private void syncSideEditors(boolean forceParseRefresh) {
+        SpellDocument doc = iotaTextView.activeDocument();
+        if (doc != null) {
+            treePanel.setActivePage(doc.pageIndex());
+        }
+        hexParsePanel.bindDocument(doc, forceParseRefresh);
+        sequenceGridHost.bindDocument(doc);
     }
 
     // ==================== 业务操作 ====================
 
-    private void openSpellPage(int pageIndex, boolean inSplit) {
-        SpellDocument doc = session.document(pageIndex);
-        if (doc == null) return;
-        TabItem.SpellTab tab = new TabItem.SpellTab(doc, new SequenceCallbacksImpl());
-        if (inSplit) {
-            editorArea.openInSplit(tab, false);
+    private void openSpellPage(int pageIndex) {
+        if (session.document(pageIndex) == null) return;
+        dockWorkspace.openOrFocus("iota_text");
+        iotaTextView.openOrFocusPage(pageIndex);
+    }
+
+    private void openNoteWindow(PageTreePanel.NoteEntry note) {
+        String winId = "note:" + note.id();
+        if (dockWorkspace.windowDef(winId) == null) {
+            MarkdownNotePanel panel = new MarkdownNotePanel(
+                session, note,
+                this::insertPatternRefAtCursor,
+                this::insertHexParseCodeSnippet
+            );
+            dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+                winId, Component.literal(note.title()), IdeTheme.Icon.NOTE_DOC,
+                panel, 200, 150, true
+            ));
+            Bounds initB = new Bounds(Math.max(40, width / 2 - 150), Math.max(36, height / 2 - 110), 300, 220);
+            dockWorkspace.floatWindow(winId, initB, false, 0, 0);
         } else {
-            editorArea.openInFocused(tab);
-        }
-        treePanel.setActivePage(pageIndex);
-        hexParsePanel.bindDocument(doc, true);
-    }
-
-    @Nullable
-    private TabItem defaultFallbackTab() {
-        SpellDocument doc = editorArea.activeSpellDocument();
-        if (doc == null && !session.documents().isEmpty()) {
-            doc = session.documents().iterator().next();
-        }
-        if (doc == null) return null;
-        return new TabItem.SpellTab(doc, new SequenceCallbacksImpl());
-    }
-
-    private void openNoteTab(PageTreePanel.NoteEntry note, boolean inSplit) {
-        MarkdownNotePanel panel = new MarkdownNotePanel(
-            session, note,
-            this::insertPatternRefAtCursor,
-            this::insertHexParseCodeSnippet
-        );
-        TabItem.NoteTab tab = new TabItem.NoteTab(note.id(), Component.literal(note.title()), panel);
-        if (inSplit) {
-            editorArea.openInSplit(tab, false);
-        } else {
-            editorArea.openInFocused(tab);
+            dockWorkspace.openOrFocus(winId);
         }
     }
 
-    private void openFloatingNote() {
+    private void openDefaultNote() {
         List<PageTreePanel.NoteEntry> notes = MarkdownNotePanel.loadAllNotes();
-        if (notes.isEmpty()) return;
-        PageTreePanel.NoteEntry note = notes.get(0);
-        floatingCounter++;
-        String winId = "note_" + floatingCounter;
-        MarkdownNotePanel panel = new MarkdownNotePanel(
-            session, note,
-            this::insertPatternRefAtCursor,
-            this::insertHexParseCodeSnippet
-        );
-        Bounds initB = new Bounds(Math.max(40, width / 2 - 140), 50 + (floatingCounter % 4) * 18, 280, 210);
-        FloatingWindow fw = new FloatingWindow(
-            winId, Component.literal(note.title()), panel, initB, 200, 140,
-            () -> {
-                windowManager.remove(winId);
-                openNoteTab(note, false);
-            },
-            () -> windowManager.remove(winId)
-        );
-        windowManager.add(fw);
+        if (!notes.isEmpty()) {
+            openNoteWindow(notes.get(0));
+        }
     }
 
-    private void openPatchouliInTab() {
+    private void openPatchouliWindow() {
+        String winId = "ext:patchouli";
+        if (dockWorkspace.windowDef(winId) != null) {
+            dockWorkspace.openOrFocus(winId);
+            return;
+        }
         Screen bookScreen = PatchouliHostBridge.openHexBookCaptured();
         if (bookScreen == null) {
             toast.showError(Component.translatable("almightly_staff.ide.patchouli_missing").getString());
             return;
         }
-        String tabId = "ext:patchouli";
         EmbeddedScreenHost host = new EmbeddedScreenHost(
             bookScreen,
-            () -> editorArea.focusedGroup().closeByTabId(tabId),
+            () -> dockWorkspace.closeWindow(winId),
             this::insertPatternRefAtCursor
         );
-        TabItem.ExternalTab tab = new TabItem.ExternalTab("patchouli",
-            Component.translatable("almightly_staff.ide.patchouli_book"), host);
-        if (editorArea.isSplitOpen()) {
-            editorArea.secondary().openOrFocus(tab);
-            editorArea.setFocusedGroup(editorArea.secondary());
-        } else {
-            editorArea.openInFocused(tab);
-        }
+        dockWorkspace.registerWindow(new DockWorkspace.WindowDef(
+            winId, Component.translatable("almightly_staff.ide.patchouli_book"),
+            IdeTheme.Icon.BOOK_EXTERNAL, host, 260, 190, true
+        ));
+        Bounds initB = new Bounds(Math.max(32, width / 2 - 170), Math.max(32, height / 2 - 125), 340, 250);
+        dockWorkspace.floatWindow(winId, initB, false, 0, 0);
     }
 
     private void insertPatternRefAtCursor(PatternRef ref) {
         if (ref == null) return;
+        SpellDocument doc = iotaTextView.activeDocument();
+        if (doc == null || doc.isSealed()) return;
         if (ref.signature().isBlank()) {
-            SpellDocument doc = editorArea.activeSpellDocument();
-            if (doc != null) {
-                session.requestGreatSpell(ref.actionId(), doc.pageIndex(),
-                    editorArea.activeSpellTab() == null ? doc.size() : editorArea.activeSpellTab().cursorIndex());
-            }
+            session.requestGreatSpell(ref.actionId(), doc.pageIndex(), iotaTextView.activeCursorIndex());
             return;
         }
         CompoundTag tag = IotaType.serialize(new PatternIota(StaffHex.patternFor(ref)));
-        insertTagsIntoActiveEditor(List.of(tag), "note");
+        iotaTextView.insertTagsAtCursor(List.of(tag), "note");
+        Component dn = StaffHex.patternDisplayName(ref);
         toast.show(Component.translatable("almightly_staff.ide.inserted_pattern",
-            StaffHex.patternDisplayName(ref) != null ? StaffHex.patternDisplayName(ref).getString() : ref.actionId()).getString());
+            dn != null ? dn.getString() : ref.actionId()).getString());
     }
 
     private void insertHexParseCodeSnippet(String code) {
-        SpellDocument doc = editorArea.activeSpellDocument();
+        SpellDocument doc = iotaTextView.activeDocument();
         if (doc == null || doc.isSealed()) return;
         if (Platform.isModLoaded("hexparse")) {
-            session.network().requestIdeParseToIotas(999999, doc.pageIndex(), code);
-            toast.show(Component.translatable("almightly_staff.ide.applied_snippet").getString());
+            pendingSnippetReq = ++snippetReqSeq;
+            pendingSnippetPage = doc.pageIndex();
+            session.network().requestIdeParseToIotas(pendingSnippetReq, doc.pageIndex(), code);
         } else {
             toast.showError(Component.translatable("almightly_staff.gui.hexparse_missing").getString());
         }
     }
 
     private void insertCatalogEntryAtCursor(PatternCatalogEntry entry) {
-        SpellDocument doc = editorArea.activeSpellDocument();
+        SpellDocument doc = iotaTextView.activeDocument();
         if (doc == null || doc.isSealed()) return;
         PatternRef ref = entry.pattern();
         if (ref.signature().isBlank()) {
-            TabItem.SpellTab st = editorArea.activeSpellTab();
-            session.requestGreatSpell(ref.actionId(), doc.pageIndex(), st == null ? doc.size() : st.cursorIndex());
+            session.requestGreatSpell(ref.actionId(), doc.pageIndex(), iotaTextView.activeCursorIndex());
             return;
         }
         CompoundTag tag = IotaType.serialize(new PatternIota(StaffHex.patternFor(ref)));
-        insertTagsIntoActiveEditor(List.of(tag), "catalog");
-    }
-
-    private void dropCatalogEntry(PatternCatalogEntry entry, double[] xy) {
-        SequenceEditorView seq = editorArea.findSequenceViewAt(xy[0], xy[1]);
-        if (seq != null) {
-            seq.acceptCatalogDrop(entry, xy[0], xy[1]);
-        }
-    }
-
-    private void insertTagsIntoActiveEditor(List<CompoundTag> tags, String source) {
-        TabItem.SpellTab st = editorArea.activeSpellTab();
-        if (st == null) return;
-        st.view().insertTagsAtCursor(tags, source);
+        iotaTextView.insertTagsAtCursor(List.of(tag), "catalog");
     }
 
     private void rebuildSearchIndex() {
@@ -468,40 +495,44 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
                 : "#" + doc.pageIndex() + " " + doc.name();
             int pid = doc.pageIndex();
             searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.PAGE, "page:" + pid, title,
-                "#" + pid, title + " " + pid, pid, "", "", "", () -> openSpellPage(pid, false)));
+                "#" + pid, title + " " + pid, pid, "", "", "", () -> openSpellPage(pid)));
         }
         for (PatternCatalogEntry entry : session.catalog()) {
             PatternRef ref = entry.pattern();
             String cn = entry.displayName().getString();
-            searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.PATTERN, ref.actionId(),
-                cn + " (" + ref.actionId() + ")", ref.signature(),
-                cn + " " + ref.actionId() + " " + ref.signature(),
-                0, ref.actionId(), ref.startDirection(), ref.signature(),
-                () -> insertCatalogEntryAtCursor(entry)));
+            String actionId = ref.actionId();
+            searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.PATTERN, actionId,
+                cn + " (" + actionId + ")", ref.signature(),
+                cn + " " + actionId + " " + ref.signature(),
+                0, actionId, ref.startDirection(), ref.signature(),
+                () -> {
+                    dockWorkspace.openOrFocus("pattern_catalog");
+                    catalogPanel.focusAction(actionId);
+                }));
         }
         for (PageTreePanel.NoteEntry note : MarkdownNotePanel.loadAllNotes()) {
             searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.NOTE, note.id(), note.title(),
                 note.id(), note.title() + " " + note.id(), 0, "", "", "",
-                () -> openNoteTab(note, false)));
+                () -> openNoteWindow(note)));
         }
-        searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:split",
-            Component.translatable("almightly_staff.ide.btn_split").getString(), "Split Editor",
-            "split 分屏", 0, "", "", "", () -> editorArea.toggleSplit(this::defaultFallbackTab)));
+        searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:cast",
+            Component.translatable("almightly_staff.ide.win_cast_collect").getString(), "Cast & Collect",
+            "cast collect 施法 采集", 0, "", "", "", () -> dockWorkspace.openOrFocus("cast_collect")));
+        searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:seq",
+            Component.translatable("almightly_staff.ide.open_sequence_grid").getString(), "Grid",
+            "grid sequence 网格", 0, "", "", "", () -> dockWorkspace.openOrFocus("sequence_grid")));
         searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:save",
             Component.translatable("almightly_staff.ide.btn_save").getString(), "Ctrl+S",
             "save 保存", 0, "", "", "", this::saveAll));
         searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:reset",
             Component.translatable("almightly_staff.ide.btn_reset_layout").getString(), "Reset Layout",
             "reset layout 重置布局", 0, "", "", "", this::resetLayout));
-        searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:float",
-            Component.translatable("almightly_staff.ide.btn_float_note").getString(), "Floating Note",
-            "float note 浮动笔记", 0, "", "", "", this::openFloatingNote));
+        searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:note",
+            Component.translatable("almightly_staff.ide.btn_float_note").getString(), "Note",
+            "note 笔记", 0, "", "", "", this::openDefaultNote));
         searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:legacy",
             Component.translatable("almightly_staff.ide.switch_legacy").getString(), "Legacy UI",
-            "legacy classic 经典界面", 0, "", "", "", () -> {
-                AlmightlyStaffConfig.get().useIdeScreen = false;
-                if (minecraft != null) minecraft.setScreen(new StaffLibScreen());
-            }));
+            "legacy classic 经典界面", 0, "", "", "", this::switchToLegacyUi));
     }
 
     // ==================== 渲染与事件 ====================
@@ -509,64 +540,41 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         renderBackground(g);
-        g.fill(0, 0, width, height, IdeTheme.BG_ROOT);
+        IdeTheme.drawNineSlice(g, 0, 0, width, height, IdeTheme.NineSlice.ROOT);
 
         topSearchBar.render(g, mouseX, mouseY, partialTick);
         leftStripe.render(g, mouseX, mouseY, partialTick);
-        if (!treeLeaf.isCollapsed()) treePanel.render(g, mouseX, mouseY, partialTick);
-        editorArea.render(g, mouseX, mouseY, partialTick);
-        if (!bottomLeaf.isCollapsed()) bottomDock.render(g, mouseX, mouseY, partialTick);
-        if (!catalogLeaf.isCollapsed()) catalogPanel.render(g, mouseX, mouseY, partialTick);
-
-        renderSplitters(g, mouseX, mouseY);
+        rightStripe.render(g, mouseX, mouseY, partialTick);
+        dockWorkspace.render(g, font, mouseX, mouseY, partialTick);
         renderStatusBar(g);
 
+        dockWorkspace.renderDropPreview(g);
         windowManager.render(g, font, mouseX, mouseY, partialTick);
 
         // Overlays
-        treePanel.renderOverlay(g, mouseX, mouseY, partialTick);
-        editorArea.renderOverlay(g, mouseX, mouseY, partialTick);
-        bottomDock.renderOverlay(g, mouseX, mouseY, partialTick);
-        catalogPanel.renderOverlay(g, mouseX, mouseY, partialTick);
+        dockWorkspace.renderOverlay(g, font, mouseX, mouseY, partialTick);
         leftStripe.renderOverlay(g, mouseX, mouseY, partialTick);
+        rightStripe.renderOverlay(g, mouseX, mouseY, partialTick);
         topSearchBar.renderOverlay(g, mouseX, mouseY, partialTick);
         contextMenu.render(g, font, mouseX, mouseY);
         toast.render(g, font, width, height);
     }
 
-    private void renderSplitters(GuiGraphics g, int mx, int my) {
-        List<DockNode.SplitNode> splits = new ArrayList<>();
-        rootSplit.collectSplitters(splits);
-        for (DockNode.SplitNode s : splits) {
-            Bounds sb = s.splitterBounds();
-            if (sb.isEmpty()) continue;
-            boolean hot = splitterDrag.draggingNode() == s || sb.contains(mx, my);
-            g.fill(sb.x(), sb.y(), sb.right(), sb.bottom(), IdeTheme.BORDER);
-            if (hot) {
-                if (s.axis() == DockNode.Axis.HORIZONTAL) {
-                    int cx = sb.x() + sb.w() / 2;
-                    g.fill(cx, sb.y(), cx + 1, sb.bottom(), IdeTheme.ACCENT);
-                } else {
-                    int cy = sb.y() + sb.h() / 2;
-                    g.fill(sb.x(), cy, sb.right(), cy + 1, IdeTheme.ACCENT);
-                }
-            }
-        }
-    }
-
     private void renderStatusBar(GuiGraphics g) {
         int y = height - STATUSBAR_H;
-        g.fill(0, y, width, height, IdeTheme.BG_PANEL);
-        g.fill(0, y, width, y + 1, IdeTheme.BORDER);
+        IdeTheme.drawNineSlice(g, 0, y, width, STATUSBAR_H, IdeTheme.NineSlice.HEADER);
         try (IdeScissor.Scope sc = IdeScissor.push(g, 0, y, width, STATUSBAR_H)) {
-            SpellDocument doc = editorArea.activeSpellDocument();
-            String left = doc == null
-                ? Component.translatable("almightly_staff.ide.status_ready").getString()
-                : "#" + doc.pageIndex() + " " + (doc.name().isEmpty() ? "" : doc.name())
-                + (doc.isDirty() ? " *" : "");
-            g.drawString(font, left, 8, y + 5, IdeTheme.TEXT_MUTED, false);
-            String right = Component.translatable("almightly_staff.gui.cast_hint").getString();
-            g.drawString(font, right, Math.max(120, width - font.width(right) - 8), y + 5, IdeTheme.TEXT_MUTED, false);
+            SpellDocument doc = iotaTextView.activeDocument();
+            String left;
+            if (doc == null) {
+                left = Component.translatable("almightly_staff.ide.status_ready").getString();
+            } else {
+                String name = doc.name().isEmpty() ? "" : doc.name();
+                left = Component.translatable("almightly_staff.ide.status_cursor",
+                    doc.pageIndex(), name, doc.isDirty() ? " *" : "",
+                    iotaTextView.activeCursorIndex(), doc.size()).getString();
+            }
+            g.drawString(font, IdeTheme.trimText(font, left, Math.max(40, width - 16)), 8, y + 5, IdeTheme.TEXT_MUTED, false);
         }
     }
 
@@ -574,94 +582,74 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
     public boolean mouseClicked(double mx, double my, int button) {
         if (contextMenu.mouseClicked(mx, my, button)) return true;
         if (topSearchBar.isPopupOpen() && topSearchBar.mouseClicked(mx, my, button)) return true;
-        if (windowManager.mouseClicked(mx, my, button)) {
+        if (windowManager.mouseClicked(mx, my, button, dockWorkspace.dockBounds())) {
             focusManager.clear();
             return true;
         }
         if (topSearchBar.bounds().contains(mx, my)) {
             return topSearchBar.mouseClicked(mx, my, button);
         }
-        if (button == 0 && splitterDrag.beginDrag(rootSplit, mx, my)) {
-            return true;
-        }
         if (leftStripe.bounds().contains(mx, my)) {
             return leftStripe.mouseClicked(mx, my, button);
         }
-        if (!treeLeaf.isCollapsed() && treePanel.bounds().contains(mx, my)) {
-            return treePanel.mouseClicked(mx, my, button);
+        if (rightStripe.bounds().contains(mx, my)) {
+            return rightStripe.mouseClicked(mx, my, button);
         }
-        if (!catalogLeaf.isCollapsed() && catalogPanel.bounds().contains(mx, my)) {
-            return catalogPanel.mouseClicked(mx, my, button);
-        }
-        if (!bottomLeaf.isCollapsed() && bottomDock.bounds().contains(mx, my)) {
-            if (!hexParsePanel.bounds().contains(mx, my)) {
+        if (dockWorkspace.mouseClicked(mx, my, button)) {
+            if (!hexParsePanel.bounds().contains(mx, my)
+                && !iotaTextView.bounds().contains(mx, my)
+                && !catalogPanel.bounds().contains(mx, my)
+                && !treePanel.bounds().contains(mx, my)) {
                 focusManager.clear();
             }
-            return bottomDock.mouseClicked(mx, my, button);
-        }
-        if (editorArea.bounds().contains(mx, my)) {
-            focusManager.clear();
-            return editorArea.mouseClicked(mx, my, button);
+            return true;
         }
         return super.mouseClicked(mx, my, button);
     }
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
-        if (windowManager.mouseDragged(mx, my, button, dx, dy, width, height - STATUSBAR_H, TopSearchBar.HEIGHT)) {
+        if (windowManager.mouseDragged(mx, my, button, dx, dy, dockWorkspace.dockBounds())) {
+            dockWorkspace.updateFloatingDragPreview(mx, my);
             return true;
         }
-        if (splitterDrag.drag(rootSplit, dockBounds, mx, my)) {
-            treePanel.layout(treeLeaf.bounds());
-            editorArea.layout(editorLeaf.bounds());
-            bottomDock.layout(bottomLeaf.bounds());
-            catalogPanel.layout(catalogLeaf.bounds());
+        if (dockWorkspace.mouseDragged(mx, my, button, dx, dy)) {
+            dockWorkspace.updateFloatingDragPreview(mx, my);
             return true;
         }
-        if (!treeLeaf.isCollapsed() && treePanel.mouseDragged(mx, my, button, dx, dy)) return true;
-        if (!catalogLeaf.isCollapsed() && catalogPanel.mouseDragged(mx, my, button, dx, dy)) return true;
-        if (!bottomLeaf.isCollapsed() && bottomDock.mouseDragged(mx, my, button, dx, dy)) return true;
-        if (editorArea.mouseDragged(mx, my, button, dx, dy)) return true;
         return super.mouseDragged(mx, my, button, dx, dy);
     }
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
-        if (windowManager.mouseReleased(mx, my, button)) return true;
-        if (splitterDrag.endDrag()) {
-            persistLayoutState();
+        FloatingWindow wasActive = windowManager.activeWindow();
+        boolean wasMoving = wasActive != null && wasActive.isMoving();
+        if (windowManager.mouseReleased(mx, my, button)) {
+            if (wasMoving) {
+                dockWorkspace.onFloatingDragReleased(mx, my);
+            }
             return true;
         }
-        boolean handled = false;
-        if (!treeLeaf.isCollapsed()) handled |= treePanel.mouseReleased(mx, my, button);
-        if (!catalogLeaf.isCollapsed()) handled |= catalogPanel.mouseReleased(mx, my, button);
-        if (!bottomLeaf.isCollapsed()) handled |= bottomDock.mouseReleased(mx, my, button);
-        handled |= editorArea.mouseReleased(mx, my, button);
-        return handled || super.mouseReleased(mx, my, button);
+        if (dockWorkspace.mouseReleased(mx, my, button)) return true;
+        return super.mouseReleased(mx, my, button);
     }
 
     @Override
     public boolean mouseScrolled(double mx, double my, double delta) {
         if (windowManager.mouseScrolled(mx, my, delta)) return true;
-        if (!treeLeaf.isCollapsed() && treePanel.mouseScrolled(mx, my, delta)) return true;
-        if (!catalogLeaf.isCollapsed() && catalogPanel.mouseScrolled(mx, my, delta)) return true;
-        if (!bottomLeaf.isCollapsed() && bottomDock.mouseScrolled(mx, my, delta)) return true;
-        if (editorArea.mouseScrolled(mx, my, delta)) return true;
+        if (dockWorkspace.mouseScrolled(mx, my, delta)) return true;
         return super.mouseScrolled(mx, my, delta);
     }
 
     @Override
     public void mouseMoved(double mx, double my) {
         windowManager.mouseMoved(mx, my);
-        if (!bottomLeaf.isCollapsed()) bottomDock.mouseMoved(mx, my);
-        editorArea.mouseMoved(mx, my);
+        dockWorkspace.mouseMoved(mx, my);
         super.mouseMoved(mx, my);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (contextMenu.keyPressed(keyCode)) return true;
-
         boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
         if (ctrl && keyCode == GLFW.GLFW_KEY_K) {
             topSearchBar.openSearch();
@@ -672,6 +660,60 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
             return true;
         }
 
+        // 第 1 级 ESC：关闭右键菜单 / 顶部搜索弹窗 / 聚焦子控件的重命名或补全
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (contextMenu.isOpen()) {
+                contextMenu.close();
+                return true;
+            }
+            if (topSearchBar.isPopupOpen()) {
+                topSearchBar.closeSearch();
+                return true;
+            }
+            IdeComponent focused = focusManager.focused();
+            if (focused != null && focused.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+            // 第 2 级 ESC：取消 HexGrid 未完成笔划
+            if (hexGridPanel.hasUnfinishedStroke()) {
+                hexGridPanel.cancelUnfinishedStroke();
+                return true;
+            }
+            // 第 3 级 ESC：嵌入式外部窗口先按内部回退/关闭；再还原最大化 / 关最顶层浮动窗
+            FloatingWindow topFloat = windowManager.activeWindow();
+            if (topFloat == null && !windowManager.windows().isEmpty()) {
+                topFloat = windowManager.windows().get(windowManager.windows().size() - 1);
+            }
+            if (topFloat != null) {
+                if (topFloat.content() instanceof EmbeddedScreenHost ext
+                    && ext.keyPressed(keyCode, scanCode, modifiers)) {
+                    return true;
+                }
+                if (topFloat.isMaximized()) {
+                    topFloat.toggleMaximize(dockWorkspace.dockBounds());
+                } else {
+                    dockWorkspace.minimizeWindow(topFloat.id());
+                }
+                return true;
+            }
+            String dockedFocus = dockWorkspace.focusedWindowId();
+            if (dockedFocus != null && dockedFocus.startsWith("ext:")) {
+                DockWorkspace.WindowDef edef = dockWorkspace.windowDef(dockedFocus);
+                if (edef != null && edef.content().keyPressed(keyCode, scanCode, modifiers)) {
+                    return true;
+                }
+            }
+            if (dockWorkspace.hasMaximizedDocked()) {
+                dockWorkspace.unmaximizeDocked();
+                return true;
+            }
+            // 第 4 级 ESC：安全保存并退出 IDE
+            onClose();
+            return true;
+        }
+
+        if (contextMenu.keyPressed(keyCode)) return true;
+
         IdeComponent focused = focusManager.focused();
         if (focused != null && focused.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
@@ -679,17 +721,9 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
         if (windowManager.activeWindow() != null && windowManager.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
-
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            if (editorArea.focusedGroup().activeTab() instanceof TabItem.ExternalTab ext
-                && ext.view().keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-            onClose();
+        if (dockWorkspace.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
-
-        if (editorArea.keyPressed(keyCode, scanCode, modifiers)) return true;
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -718,14 +752,14 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
         super.tick();
         toast.tick();
         windowManager.tick();
-        treePanel.tick();
-        editorArea.tick();
-        if (!bottomLeaf.isCollapsed()) bottomDock.tick();
+        dockWorkspace.tick();
     }
 
     @Override
     public void onClose() {
+        iotaTextView.commitNameEdit();
         hexGridPanel.dispose();
+        castCollectPanel.dispose();
         persistLayoutState();
         session.saveAllDirty();
         super.onClose();
@@ -734,6 +768,7 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
     @Override
     public void removed() {
         hexGridPanel.dispose();
+        castCollectPanel.dispose();
         super.removed();
     }
 
@@ -742,33 +777,52 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
         return false;
     }
 
-    // ==================== 内部回调适配器 ====================
+    // ==================== 内部回调 ====================
 
-    private final class EditorCallbacksImpl implements EditorArea.Callbacks {
-        @Override
-        public void onSetCastPage(int pageIndex) {
-            session.selectCastPage(pageIndex);
-        }
-
+    private final class TextViewCallbacks implements IotaTextEditorView.Callbacks {
         @Override
         public void openContextMenu(int mx, int my, List<ContextMenuOverlay.MenuItem> items) {
             contextMenu.open(mx, my, width, height, font, items);
         }
 
         @Override
-        public TabItem cloneTabForSplit(TabItem source) {
-            if (source instanceof TabItem.SpellTab st) {
-                return new TabItem.SpellTab(st.document(), new SequenceCallbacksImpl());
-            }
-            return source;
+        public void onEnsureHexGridOpen() {
+            dockWorkspace.openOrFocus("hex_grid");
         }
 
         @Override
-        public void onActiveDocumentChanged(@Nullable SpellDocument doc) {
-            if (doc != null) {
-                treePanel.setActivePage(doc.pageIndex());
-            }
-            hexParsePanel.bindDocument(doc, true);
+        public void onEnsureCastCollectOpen() {
+            dockWorkspace.openOrFocus("cast_collect");
+            castCollectPanel.beginFreshSession();
+        }
+
+        @Override
+        public void onOpenPopupDraw(int pageIndex, int slotIndex, boolean insertAfter) {
+            SpellDocument doc = session.document(pageIndex);
+            if (doc == null || doc.isSealed() || minecraft == null) return;
+            minecraft.setScreen(new StaffDrawScreen(StaffIdeScreen.this, ref -> {
+                session.learnGreatSpell(ref);
+                CompoundTag tag = IotaType.serialize(new PatternIota(StaffHex.patternFor(ref)));
+                int pos = insertAfter ? Math.min(slotIndex + 1, doc.size()) : Math.min(Math.max(0, slotIndex), doc.size());
+                doc.insertAt(pos, List.of(tag), "draw");
+                onDocumentMutated(doc, "draw");
+            }));
+        }
+
+        @Override
+        public void onActivePageChanged(@Nullable SpellDocument doc) {
+            syncSideEditors(true);
+        }
+
+        @Override
+        public void onDocumentMutated(SpellDocument doc, String source) {
+            session.saveDocument(doc);
+            hexParsePanel.onDocumentChanged(doc, source);
+        }
+
+        @Override
+        public void onSetCastPage(int pageIndex) {
+            session.selectCastPage(pageIndex);
         }
     }
 
@@ -785,35 +839,13 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
 
         @Override
         public void openDrawModal(int pageIndex, int slotIndex, boolean insertAfter) {
-            SpellDocument doc = session.document(pageIndex);
-            if (doc == null || doc.isSealed() || minecraft == null) return;
-            minecraft.setScreen(new StaffDrawScreen(StaffIdeScreen.this, ref -> {
-                session.learnGreatSpell(ref);
-                CompoundTag tag = IotaType.serialize(new PatternIota(StaffHex.patternFor(ref)));
-                if (insertAfter) {
-                    int pos = Math.max(0, Math.min(slotIndex + 1, doc.size()));
-                    doc.insertAt(pos, List.of(tag), "sequence");
-                } else if (slotIndex >= 0 && slotIndex < doc.size()) {
-                    doc.replaceAt(slotIndex, tag, "sequence");
-                } else {
-                    doc.insertAt(doc.size(), List.of(tag), "sequence");
-                }
-                onDocumentMutated(doc, "sequence");
-            }));
+            new TextViewCallbacks().onOpenPopupDraw(pageIndex, slotIndex, insertAfter);
         }
 
         @Override
         public void openCastCollectModal(int pageIndex, int insertAt) {
-            SpellDocument doc = session.document(pageIndex);
-            if (doc == null || doc.isSealed() || minecraft == null) return;
-            session.network().clearCastStack();
-            minecraft.setScreen(new StaffCastScreen(StaffIdeScreen.this, collected -> {
-                if (collected != null && !collected.isEmpty() && !doc.isSealed()) {
-                    doc.insertAt(insertAt, collected, "sequence");
-                    onDocumentMutated(doc, "sequence");
-                    toast.show(Component.translatable("almightly_staff.gui.stack_collected", collected.size()).getString());
-                }
-            }));
+            dockWorkspace.openOrFocus("cast_collect");
+            castCollectPanel.beginFreshSession();
         }
 
         @Override
@@ -823,33 +855,117 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
         }
     }
 
-    private final class TreeCallbacksImpl implements PageTreePanel.Callbacks {
-        @Override
-        public void onOpenSpellPage(int pageIndex, boolean split) {
-            openSpellPage(pageIndex, split);
+    private final class SequenceGridHost implements IdeComponent {
+        private final Map<Integer, TabItem.SpellTab> tabsByPage = new HashMap<>();
+        @Nullable
+        private TabItem.SpellTab activeTab;
+        private Bounds bounds = Bounds.EMPTY;
+
+        public void bindDocument(@Nullable SpellDocument doc) {
+            if (doc == null) {
+                activeTab = null;
+                return;
+            }
+            activeTab = tabsByPage.computeIfAbsent(doc.pageIndex(),
+                pid -> new TabItem.SpellTab(doc, new SequenceCallbacksImpl()));
+            if (activeTab.document() != doc) {
+                activeTab = new TabItem.SpellTab(doc, new SequenceCallbacksImpl());
+                tabsByPage.put(doc.pageIndex(), activeTab);
+            }
+            if (!bounds.isEmpty()) {
+                activeTab.view().layout(bounds);
+            }
+        }
+
+        public void acceptCatalogDrop(PatternCatalogEntry entry, double mx, double my) {
+            if (activeTab != null && bounds.contains(mx, my)) {
+                activeTab.view().acceptCatalogDrop(entry, mx, my);
+            }
         }
 
         @Override
-        public void onOpenNote(PageTreePanel.NoteEntry note, boolean split) {
-            openNoteTab(note, split);
+        public Bounds bounds() {
+            return bounds;
+        }
+
+        @Override
+        public void layout(Bounds bounds) {
+            this.bounds = bounds;
+            if (activeTab != null) activeTab.view().layout(bounds);
+        }
+
+        @Override
+        public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+            if (bounds.isEmpty()) return;
+            if (activeTab == null) {
+                IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.ROOT);
+                IdeTheme.drawClippedString(g, font, Component.translatable("almightly_staff.ide.empty_spell_hint"),
+                    bounds.x() + 10, bounds.y() + 10, bounds.w() - 20, IdeTheme.TEXT_MUTED);
+                return;
+            }
+            activeTab.view().render(g, mouseX, mouseY, partialTick);
+        }
+
+        @Override
+        public void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+            if (activeTab != null) activeTab.view().renderOverlay(g, mouseX, mouseY, partialTick);
+        }
+
+        @Override
+        public boolean mouseClicked(double mx, double my, int button) {
+            return activeTab != null && activeTab.view().mouseClicked(mx, my, button);
+        }
+
+        @Override
+        public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+            return activeTab != null && activeTab.view().mouseDragged(mx, my, button, dx, dy);
+        }
+
+        @Override
+        public boolean mouseReleased(double mx, double my, int button) {
+            return activeTab != null && activeTab.view().mouseReleased(mx, my, button);
+        }
+
+        @Override
+        public boolean mouseScrolled(double mx, double my, double delta) {
+            return activeTab != null && activeTab.view().mouseScrolled(mx, my, delta);
+        }
+
+        @Override
+        public void mouseMoved(double mx, double my) {
+            if (activeTab != null) activeTab.view().mouseMoved(mx, my);
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return activeTab != null && activeTab.view().keyPressed(keyCode, scanCode, modifiers);
+        }
+    }
+
+    private final class TreeCallbacksImpl implements PageTreePanel.Callbacks {
+        @Override
+        public void onOpenSpellPage(int pageIndex) {
+            openSpellPage(pageIndex);
+        }
+
+        @Override
+        public void onOpenNote(PageTreePanel.NoteEntry note) {
+            openNoteWindow(note);
         }
 
         @Override
         public void onOpenExternalPatchouli() {
-            openPatchouliInTab();
+            openPatchouliWindow();
         }
 
         @Override
         public void onCopyPageAsHexParse(int pageIndex) {
-            SpellDocument doc = session.document(pageIndex);
-            if (doc == null || minecraft == null) return;
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < doc.iotasView().size(); i++) {
-                if (i > 0) sb.append(", ");
-                sb.append(IotaType.getDisplay(doc.iotasView().get(i)).getString());
-            }
-            minecraft.keyboardHandler.setClipboard(sb.toString());
-            toast.show(Component.translatable("almightly_staff.ide.copied_clipboard").getString());
+            session.requestCodeForAction(pageIndex, code -> {
+                if (minecraft != null) {
+                    minecraft.keyboardHandler.setClipboard(code);
+                    toast.show(Component.translatable("almightly_staff.ide.copied_clipboard").getString());
+                }
+            });
         }
 
         @Override

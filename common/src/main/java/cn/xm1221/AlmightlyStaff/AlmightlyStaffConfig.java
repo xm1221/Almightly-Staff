@@ -46,4 +46,15 @@ public final class AlmightlyStaffConfig {
             instance.mediaRegenAmountDust = Math.max(0, instance.mediaRegenAmountDust);
         }
     }
+
+    public static void save() {
+        Path path = Platform.getConfigFolder().resolve("almightly_staff.json");
+        try {
+            Files.createDirectories(path.getParent());
+            try (Writer writer = Files.newBufferedWriter(path)) {
+                GSON.toJson(instance, writer);
+            }
+        } catch (IOException ignored) {
+        }
+    }
 }

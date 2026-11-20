@@ -44,7 +44,7 @@ class IdeWorkspaceStorageTest {
         Files.writeString(target, "{ broken json !!!", StandardCharsets.UTF_8);
 
         WorkspaceState loaded = storage.load("corrupt-id");
-        assertEquals(1, loaded.version);
+        assertEquals(2, loaded.version);
         assertEquals("split", loaded.layout.bottomMode);
         assertTrue(loaded.folders.isEmpty());
     }

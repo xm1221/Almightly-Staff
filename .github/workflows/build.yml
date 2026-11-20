@@ -1,0 +1,46 @@
+name: Build and test
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-mod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Architectury Loom 1.13 (unpick) needs a Java 21 runtime for Gradle;
+      # the mod itself compiles to Java 21 as well (1.21.1 target).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Compile common + both loaders
+        run: ./gradlew --no-daemon :common:classes :fabric:classes :neoforge:classes
+
+      - name: Build mod jars
+        run: ./gradlew --no-daemon :fabric:build :neoforge:build -x test
+
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: almightly-staff-jars
+          path: |
+            fabric/build/libs/*.jar
+            neoforge/build/libs/*.jar
+          if-no-files-found: warn

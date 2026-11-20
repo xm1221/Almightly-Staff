@@ -26,6 +26,10 @@ subprojects {
     }
 
     repositories {
+        // Vendored mod jars (Hex Casting 1.21.1 / HexParse 1.21.1 are not on any
+        // public maven we can reach, so they are committed under local-maven/).
+        maven { url = rootProject.file('local-maven').toURI() }
+
         // Add repositories to retrieve artifacts from in here.
         // You should only use this when depending on other mods because
         // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
@@ -63,8 +67,11 @@ subprojects {
         compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:0.5.0"))
         // implementation "io.github.llamalad7:mixinextras-forge:0.5.0"  // NeoForge includes this
 
-        //modImplementation("at.petra-k.hexcasting:hexcasting-${nameForRef}-${project.minecraft_version}:${project.hexcastingVersion}") { transitive = false }
-        //modImplementation fileTree(dir: "libs", include: '*.jar')
+        modImplementation("at.petra-k.hexcasting:hexcasting-common-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
+        if (project.name != 'common') {
+            modImplementation("at.petra-k.hexcasting:hexcasting-${nameForRef}-${project.minecraft_version}:${rootProject.hexcastingVersion}") { transitive = false }
+            modImplementation("io.yukkuric.hexparse:hexparse-${nameForRef}-${project.minecraft_version}:${rootProject.hexparseVersion}") { transitive = false }
+        }
 
     }
 

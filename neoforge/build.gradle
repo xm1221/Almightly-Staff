@@ -47,7 +47,6 @@ dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
     common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowBundle project(path: ':common', configuration: 'transformProductionNeoForge')
-    implementation fileTree(dir: "libs", include: '*.jar')
 }
 
 processResources {

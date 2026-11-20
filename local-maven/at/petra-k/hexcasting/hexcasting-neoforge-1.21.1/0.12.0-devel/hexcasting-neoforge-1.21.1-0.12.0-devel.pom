@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>at.petra-k.hexcasting</groupId>
+  <artifactId>hexcasting-neoforge-1.21.1</artifactId>
+  <version>0.12.0-devel</version>
+  <packaging>jar</packaging>
+</project>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>io.yukkuric.hexparse</groupId>
+  <artifactId>hexparse-neoforge-1.21.1</artifactId>
+  <version>1.21.1-1.12.1-pre67</version>
+  <packaging>jar</packaging>
+</project>

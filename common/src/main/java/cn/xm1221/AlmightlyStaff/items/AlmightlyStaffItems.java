@@ -22,7 +22,7 @@ public class AlmightlyStaffItems {
     public static ItemStack getHomelessBottle() {
         var stack = new ItemStack(AlmightlyStaffMod.HOME_BOTTLE, 1);
         long max = 64 * MediaConstants.QUENCHED_BLOCK_UNIT;
-        stack.set(HexDataComponents.MAX_MEDIA.get(), max);
+        stack.set(HexDataComponents.MEDIA_MAX.get(), max);
         stack.set(HexDataComponents.MEDIA.get(), max);
         return stack;
     }

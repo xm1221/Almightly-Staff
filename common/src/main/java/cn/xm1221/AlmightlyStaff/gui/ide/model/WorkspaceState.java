@@ -196,6 +196,82 @@ public final class WorkspaceState {
         }
     }
 
+    /** 在 {@code insertAt} 处插入 {@code count} 个 Iota 后，顺移后续手动换行与空格索引。 */
+    public boolean shiftFormattingOnInsert(int pageIndex, int insertAt, int count) {
+        if (count <= 0) return false;
+        boolean changed = false;
+        Set<Integer> oldBreaks = lineBreaksForPage(pageIndex);
+        if (!oldBreaks.isEmpty()) {
+            Set<Integer> next = new LinkedHashSet<>();
+            for (int pos : oldBreaks) {
+                if (pos > insertAt) {
+                    next.add(pos + count);
+                    changed = true;
+                } else {
+                    next.add(pos);
+                }
+            }
+            if (changed) setLineBreaksForPage(pageIndex, next);
+        }
+        Map<Integer, Integer> oldSpaces = spacesForPage(pageIndex);
+        if (!oldSpaces.isEmpty()) {
+            Map<Integer, Integer> next = new HashMap<>();
+            boolean spaceChanged = false;
+            for (Map.Entry<Integer, Integer> e : oldSpaces.entrySet()) {
+                int pos = e.getKey();
+                if (pos > insertAt) {
+                    next.put(pos + count, e.getValue());
+                    spaceChanged = true;
+                } else {
+                    next.put(pos, e.getValue());
+                }
+            }
+            if (spaceChanged) {
+                setSpacesForPage(pageIndex, next);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /** 删除 {@code removedIndices} 后，压缩调整手动换行与空格索引并钳位到 {@code [0, newSize]}。 */
+    public boolean shiftFormattingOnRemove(int pageIndex, Set<Integer> removedIndices, int newSize) {
+        if (removedIndices == null || removedIndices.isEmpty()) return false;
+        boolean changed = false;
+        Set<Integer> oldBreaks = lineBreaksForPage(pageIndex);
+        if (!oldBreaks.isEmpty()) {
+            Set<Integer> next = new LinkedHashSet<>();
+            for (int pos : oldBreaks) {
+                int before = 0;
+                for (int r : removedIndices) {
+                    if (r < pos) before++;
+                }
+                int mapped = Math.max(0, Math.min(newSize, pos - before));
+                if (mapped != pos) changed = true;
+                if (newSize > 0) next.add(mapped);
+                else changed = true;
+            }
+            setLineBreaksForPage(pageIndex, next);
+        }
+        Map<Integer, Integer> oldSpaces = spacesForPage(pageIndex);
+        if (!oldSpaces.isEmpty()) {
+            Map<Integer, Integer> next = new HashMap<>();
+            for (Map.Entry<Integer, Integer> e : oldSpaces.entrySet()) {
+                int pos = e.getKey();
+                int before = 0;
+                for (int r : removedIndices) {
+                    if (r < pos) before++;
+                }
+                int mapped = Math.max(0, Math.min(newSize, pos - before));
+                if (mapped != pos) changed = true;
+                if (newSize > 0) next.merge(mapped, e.getValue(), Integer::sum);
+                else changed = true;
+            }
+            setSpacesForPage(pageIndex, next);
+        }
+        return changed;
+    }
+
     public void movePageToFolder(int pageIndex, String targetFolderId) {
         for (VirtualFolder f : folders) {
             f.pageIndices.removeIf(p -> p != null && p == pageIndex);

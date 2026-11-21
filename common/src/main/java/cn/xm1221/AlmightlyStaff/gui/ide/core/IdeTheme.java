@@ -93,14 +93,36 @@ public final class IdeTheme {
         MAXIMIZE_BOX,
         RESTORE_BOX,
         MINIMIZE_BAR,
-        HEX_GRID_ICON,
+        HEX_GRID_ICON(0, 80, 14),
         HEX_PARSE_ICON,
         PLUS_ICON,
         COPY_ICON,
         TRASH_ICON,
         MORE_DOTS,
         CHECK_APPLY,
-        CENTER_RESET
+        CENTER_RESET,
+        CATALOG_LIST,
+        STAFF_LOGO(0, 80, 14);
+
+        final int u;
+        final int v;
+        final int size;
+
+        Icon() {
+            this.u = ordinal() * 10;
+            this.v = 64;
+            this.size = 8;
+        }
+
+        Icon(int u, int v, int size) {
+            this.u = u;
+            this.v = v;
+            this.size = size;
+        }
+
+        public int size() {
+            return size;
+        }
     }
 
     private static Boolean cachedHasTex;
@@ -234,7 +256,7 @@ public final class IdeTheme {
         g.drawString(font, trimText(font, text.getString(), maxWidth), x, y, color, false);
     }
 
-    /** 从 256x256 图集绘制 8x8 可着色像素图标。 */
+    /** 从 256x256 图集绘制可着色像素图标（大尺寸图标自动以 8x8 锚点为中心对齐）。 */
     public static void drawIcon(GuiGraphics g, Icon icon, int x, int y, int color) {
         if (hasTexture()) {
             float a = ((color >>> 24) & 0xFF) / 255.0F;
@@ -242,10 +264,11 @@ public final class IdeTheme {
             float r = ((color >>> 16) & 0xFF) / 255.0F;
             float gr = ((color >>> 8) & 0xFF) / 255.0F;
             float b = (color & 0xFF) / 255.0F;
+            int off = (icon.size - 8) / 2;
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             g.setColor(r, gr, b, a);
-            g.blit(WIDGETS_TEX, x, y, icon.ordinal() * 10, 64, 8, 8);
+            g.blit(WIDGETS_TEX, x - off, y - off, icon.u, icon.v, icon.size, icon.size);
             g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
             return;
         }

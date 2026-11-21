@@ -50,6 +50,13 @@ public final class HexParseLexer {
                 out.add(new Token(TokenType.COMMENT, i, len, line.substring(i)));
                 break;
             }
+            if (c == '/' && i + 1 < len && line.charAt(i + 1) == '*') {
+                int end = line.indexOf("*/", i + 2);
+                int stop = end >= 0 ? end + 2 : len;
+                out.add(new Token(TokenType.COMMENT, i, stop, line.substring(i, stop)));
+                i = stop;
+                continue;
+            }
             if (c == '{') {
                 out.add(new Token(TokenType.BRACE_OPEN, i, i + 1, "{"));
                 i++;
@@ -81,13 +88,13 @@ public final class HexParseLexer {
                 i++;
                 continue;
             }
-            // 读取连续标识符或数字（以空白、逗号、括号、分号或注释边界结束）
+            // 读取连续标识符或数字（以空白、逗号、括号、分号或注释边界结束，保留路径中的 '/'）
             int s = i;
             while (i < len) {
                 char ch = line.charAt(i);
                 if (Character.isWhitespace(ch) || ch == ',' || ch == ';' || ch == '{' || ch == '}'
-                    || ch == '[' || ch == ']' || ch == '\\'
-                    || (ch == '/' && i + 1 < len && line.charAt(i + 1) == '/')) {
+                    || ch == '[' || ch == ']' || ch == '(' || ch == ')' || ch == '\\'
+                    || (ch == '/' && i + 1 < len && (line.charAt(i + 1) == '/' || line.charAt(i + 1) == '*'))) {
                     break;
                 }
                 i++;
@@ -106,6 +113,9 @@ public final class HexParseLexer {
         if (word.startsWith("num:") || word.startsWith("number:")) {
             return TokenType.NUMBER;
         }
+        if (word.startsWith("mask_") && word.length() > 5) {
+            return TokenType.PATTERN_KNOWN;
+        }
         if (knownIdentifiers != null && !knownIdentifiers.isEmpty()) {
             String lower = word.toLowerCase(Locale.ROOT);
             if (knownIdentifiers.contains(lower)) {
@@ -113,6 +123,9 @@ public final class HexParseLexer {
             }
             int colon = lower.indexOf(':');
             if (colon < 0 && knownIdentifiers.contains("hexcasting:" + lower)) {
+                return TokenType.PATTERN_KNOWN;
+            }
+            if (colon >= 0 && knownIdentifiers.contains(lower.substring(colon + 1))) {
                 return TokenType.PATTERN_KNOWN;
             }
         }

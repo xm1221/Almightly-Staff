@@ -124,7 +124,7 @@ public final class TopSearchBar implements IdeComponent {
             actionBounds.add(reversed.get(i));
         }
 
-        int brandW = 68;
+        int brandW = 70;
         int sx = bounds.x() + brandW;
         int avail = rightX - sx - 6;
         compactSearch = avail < 110 && !focusManager.isFocused(this);
@@ -143,9 +143,9 @@ public final class TopSearchBar implements IdeComponent {
         IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.HEADER);
 
         try (IdeScissor.Scope sc = IdeScissor.push(g, bounds)) {
-            IdeTheme.drawIcon(g, IdeTheme.Icon.SPELL_STAR, bounds.x() + 6, bounds.y() + 6, IdeTheme.ACCENT_LIGHT);
+            IdeTheme.drawIcon(g, IdeTheme.Icon.STAFF_LOGO, bounds.x() + 6, bounds.y() + 6, IdeTheme.ACCENT_LIGHT);
             g.drawString(font, Component.translatable("almightly_staff.ide.brand"),
-                bounds.x() + 17, bounds.y() + 6, IdeTheme.TEXT_MAIN, false);
+                bounds.x() + 20, bounds.y() + 6, IdeTheme.TEXT_MAIN, false);
 
             boolean focused = focusManager.isFocused(this);
             if (compactSearch && !focused) {

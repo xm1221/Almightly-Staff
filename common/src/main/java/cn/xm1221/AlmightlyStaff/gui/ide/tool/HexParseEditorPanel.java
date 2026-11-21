@@ -45,7 +45,8 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
     private static final int ROW_H = 13;
     private static final int STATUS_H = 16;
 
-    private record WrappedRow(int logicalLine, int startOffset, int endOffset, String text) {
+    private record WrappedRow(int logicalLine, int logicalStart, int logicalEnd,
+                              int startOffset, int endOffset, String text) {
     }
 
     private record Candidate(String insertText, String displayLabel) {
@@ -208,7 +209,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         cachedRows.clear();
 
         if (code.isEmpty()) {
-            cachedRows.add(new WrappedRow(1, 0, 0, ""));
+            cachedRows.add(new WrappedRow(1, 0, 0, 0, 0, ""));
             return;
         }
         var splitter = font.getSplitter();
@@ -220,7 +221,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
             int lineEnd = nl >= 0 ? nl : len;
             String logicalText = code.substring(pos, lineEnd);
             if (logicalText.isEmpty()) {
-                cachedRows.add(new WrappedRow(logicalLine, pos, pos, ""));
+                cachedRows.add(new WrappedRow(logicalLine, pos, lineEnd, pos, pos, ""));
             } else {
                 int local = 0;
                 while (local < logicalText.length()) {
@@ -228,7 +229,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                     int fit = splitter.plainIndexAtWidth(rem, ew, Style.EMPTY);
                     if (fit <= 0) fit = 1;
                     int segEnd = Math.min(logicalText.length(), local + fit);
-                    cachedRows.add(new WrappedRow(logicalLine, pos + local, pos + segEnd,
+                    cachedRows.add(new WrappedRow(logicalLine, pos, lineEnd, pos + local, pos + segEnd,
                         logicalText.substring(local, segEnd)));
                     local = segEnd;
                 }
@@ -237,7 +238,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                 pos = nl + 1;
                 logicalLine++;
                 if (pos == len) {
-                    cachedRows.add(new WrappedRow(logicalLine, len, len, ""));
+                    cachedRows.add(new WrappedRow(logicalLine, len, len, len, len, ""));
                 }
             } else {
                 break;
@@ -366,7 +367,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                     g.fill(bx, y, bx + bw, y + ROW_H, 0x559C6ADE);
                 }
 
-                renderHighlightedLine(g, font, row.text(), textArea.x(), y + 2);
+                renderHighlightedLine(g, font, row, textArea.x(), y + 2);
             }
 
             if (focusManager.isFocused(this)) {
@@ -411,11 +412,20 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         }
     }
 
-    private void renderHighlightedLine(GuiGraphics g, Font font, String text, int startX, int y) {
-        if (text.isEmpty()) return;
-        List<HexParseLexer.Token> tokens = HexParseLexer.tokenizeLine(text, session.knownIdentifiers());
+    private void renderHighlightedLine(GuiGraphics g, Font font, WrappedRow row, int startX, int y) {
+        if (row.text().isEmpty()) return;
+        String logical = code.substring(row.logicalStart(), row.logicalEnd());
+        List<HexParseLexer.Token> tokens = HexParseLexer.tokenizeLine(logical, session.knownIdentifiers());
+        int sliceStart = row.startOffset() - row.logicalStart();
+        int sliceEnd = row.endOffset() - row.logicalStart();
         int x = startX;
         for (HexParseLexer.Token tok : tokens) {
+            if (tok.end() <= sliceStart) continue;
+            if (tok.start() >= sliceEnd) break;
+            int s = Math.max(sliceStart, tok.start()) - tok.start();
+            int e = Math.min(sliceEnd, tok.end()) - tok.start();
+            String part = tok.text().substring(s, e);
+            if (part.isEmpty()) continue;
             int col = switch (tok.type()) {
                 case COMMENT -> 0xFF6A9955;
                 case BRACE_OPEN, BRACE_CLOSE -> IdeTheme.GOLD_SEAL;
@@ -425,8 +435,8 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                 case IDENTIFIER -> IdeTheme.TEXT_MAIN;
                 case PUNCTUATION, WHITESPACE -> IdeTheme.TEXT_MUTED;
             };
-            g.drawString(font, tok.text(), x, y, col, false);
-            x += font.width(tok.text());
+            g.drawString(font, part, x, y, col, false);
+            x += font.width(part);
         }
     }
 
@@ -475,7 +485,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
         int s = cur;
         while (s > 0) {
             char c = code.charAt(s - 1);
-            if (Character.isLetterOrDigit(c) || c == '_' || c == ':' || c == '/') s--;
+            if (Character.isLetterOrDigit(c) || c == '_' || c == ':' || c == '/' || c == '-' || c == '.') s--;
             else break;
         }
         return code.substring(s, cur);

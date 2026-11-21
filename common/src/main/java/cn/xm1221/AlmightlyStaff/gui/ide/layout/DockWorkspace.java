@@ -46,7 +46,8 @@ public final class DockWorkspace {
         }
     }
 
-    private record TabHit(DockNode.LeafNode leaf, String windowId, Bounds tabBounds, @Nullable Bounds closeBounds) {
+    private record TabHit(DockNode.LeafNode leaf, String windowId, Bounds tabBounds,
+                          @Nullable Bounds closeBounds, Component tooltip) {
     }
 
     private record ActionHit(@Nullable DockNode.LeafNode leaf, String windowId, String action, Bounds bounds, Component tooltip) {
@@ -243,6 +244,8 @@ public final class DockWorkspace {
         root.collectLeaves(leaves);
         if (leaves.isEmpty()) {
             root = new DockNode.LeafNode("slot_main", List.of(windowId));
+        } else if (leaves.size() == 1 && leaves.get(0).windows().isEmpty()) {
+            leaves.get(0).addWindow(windowId);
         } else {
             DockNode.LeafNode target = defaultZone == DockNode.DropZone.LEFT
                 ? leaves.get(0)
@@ -275,8 +278,7 @@ public final class DockWorkspace {
                 leaf.focusWindow(windowId);
                 layout(dockBounds);
                 onLayoutChanged.run();
-            } else if (!"iota_text".equals(windowId)) {
-                // 主工作区之外的停靠窗口再次点击侧栏按钮即收起（最小化）
+            } else {
                 minimizeWindow(windowId);
             }
             return;
@@ -285,7 +287,6 @@ public final class DockWorkspace {
     }
 
     public void minimizeWindow(String windowId) {
-        if ("iota_text".equals(windowId)) return;
         FloatingWindow fw = windowManager.find(windowId);
         if (fw != null) {
             lastFloatingBounds.put(windowId, fw.bounds());
@@ -352,7 +353,8 @@ public final class DockWorkspace {
         WindowDef def = registry.get(windowId);
         if (def == null) return;
         FloatingWindow fw = new FloatingWindow(
-            windowId, def.title(), def.content(), fb, def.minW(), def.minH(),
+            windowId, def.title(), def.icon(), windowId.startsWith("note:"),
+            def.content(), fb, def.minW(), def.minH(),
             () -> minimizeWindow(windowId),
             () -> closeWindow(windowId)
         );
@@ -367,7 +369,7 @@ public final class DockWorkspace {
         return switch (windowId) {
             case "page_tree", "hex_grid" -> DockNode.DropZone.LEFT;
             case "hex_parse", "sequence_grid" -> DockNode.DropZone.BOTTOM;
-            case "pattern_catalog", "cast_collect" -> DockNode.DropZone.RIGHT;
+            case "iota_text", "pattern_catalog", "cast_collect" -> DockNode.DropZone.RIGHT;
             default -> DockNode.DropZone.CENTER;
         };
     }
@@ -447,7 +449,7 @@ public final class DockWorkspace {
         // 右侧槽位动作钮：[□/❐最大化] [⧉浮动] [×关闭]
         int ax = headerB.right() - 16;
         int ay = headerB.y() + 3;
-        if (activeDef != null && (activeDef.closable() || !"iota_text".equals(activeDef.id()))) {
+        if (activeDef != null) {
             Bounds cb = new Bounds(ax, ay, 14, 14);
             boolean hov = cb.contains(mouseX, mouseY);
             if (hov) IdeTheme.drawNineSlice(g, cb, IdeTheme.NineSlice.BTN_HOVER);
@@ -476,7 +478,7 @@ public final class DockWorkspace {
             ax -= 4;
         }
 
-        // 左侧标签页条
+        // 左侧全图标标签页条（无文本窗口种类名，悬停显示完整名称；动态笔记/外部界面带 inline 关闭叉）
         int tabX = headerB.x() + 2;
         int tabMaxRight = Math.max(tabX, ax);
         try (IdeScissor.Scope sc = IdeScissor.push(g, headerB.x(), headerB.y(), Math.max(0, tabMaxRight - headerB.x()), headerB.h())) {
@@ -485,24 +487,29 @@ public final class DockWorkspace {
                 WindowDef def = registry.get(wid);
                 if (def == null) continue;
                 boolean isAct = (i == activeIdx);
-                String label = def.title().getString();
                 boolean showClose = def.closable() && leaf != null;
-                int desiredW = Math.min(130, 18 + font.width(label) + (showClose ? 14 : 6));
+                boolean isNote = wid.startsWith("note:");
+                int desiredW = isNote
+                    ? Math.min(120, 18 + font.width(def.title().getString()) + (showClose ? 14 : 6))
+                    : (showClose ? 30 : 20);
                 int avail = tabMaxRight - tabX;
-                if (avail < 24) break;
+                if (avail < 18) break;
                 int tw = Math.min(desiredW, avail);
                 Bounds tb = new Bounds(tabX, headerB.y() + 1, tw, headerB.h() - 1);
                 IdeTheme.drawNineSlice(g, tb, isAct ? IdeTheme.NineSlice.TAB_ACTIVE : IdeTheme.NineSlice.TAB_INACTIVE);
                 if (isAct) {
                     g.fill(tb.x() + 1, tb.y(), tb.right() - 1, tb.y() + 2, IdeTheme.ACCENT);
                 }
-                IdeTheme.drawIcon(g, def.icon(), tb.x() + 4, tb.y() + 5, isAct ? IdeTheme.ACCENT_LIGHT : IdeTheme.TEXT_MUTED);
-                int textW = Math.max(4, tw - 16 - (showClose ? 14 : 4));
-                IdeTheme.drawClippedString(g, font, def.title(), tb.x() + 14, tb.y() + 5, textW,
-                    isAct ? IdeTheme.TEXT_MAIN : IdeTheme.TEXT_MUTED);
+                int iconX = isNote ? tb.x() + 4 : tb.x() + (showClose ? 4 : Math.max(1, (tw - 8) / 2));
+                IdeTheme.drawIcon(g, def.icon(), iconX, tb.y() + 5, isAct ? IdeTheme.ACCENT_LIGHT : IdeTheme.TEXT_MUTED);
+                if (isNote) {
+                    int textW = Math.max(4, tw - 16 - (showClose ? 14 : 4));
+                    IdeTheme.drawClippedString(g, font, def.title(), tb.x() + 14, tb.y() + 5, textW,
+                        isAct ? IdeTheme.TEXT_MAIN : IdeTheme.TEXT_MUTED);
+                }
 
                 Bounds closeB = null;
-                if (showClose && tw >= 36) {
+                if (showClose && tw >= 26) {
                     closeB = new Bounds(tb.right() - 12, tb.y() + 4, 10, 10);
                     boolean ch = closeB.contains(mouseX, mouseY);
                     if (ch || isAct) {
@@ -511,7 +518,7 @@ public final class DockWorkspace {
                     }
                 }
                 if (leaf != null) {
-                    tabHits.add(new TabHit(leaf, wid, tb, closeB));
+                    tabHits.add(new TabHit(leaf, wid, tb, closeB, def.title()));
                 }
                 tabX += tw + 1;
             }
@@ -557,6 +564,12 @@ public final class DockWorkspace {
     public void renderOverlay(GuiGraphics g, Font font, int mouseX, int mouseY, float partialTick) {
         for (ActionHit hit : actionHits) {
             if (hit.bounds().contains(mouseX, mouseY)) {
+                g.renderTooltip(font, hit.tooltip(), mouseX, mouseY);
+                return;
+            }
+        }
+        for (TabHit hit : tabHits) {
+            if (hit.tabBounds().contains(mouseX, mouseY)) {
                 g.renderTooltip(font, hit.tooltip(), mouseX, mouseY);
                 return;
             }

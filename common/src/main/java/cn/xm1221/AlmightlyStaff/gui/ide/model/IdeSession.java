@@ -201,6 +201,7 @@ public final class IdeSession {
             }
         }
         documents.keySet().removeIf(k -> !incomingIds.contains(k));
+        reloadCatalog();
         workspace.sanitize(documents.keySet());
         for (Listener l : List.copyOf(listeners)) {
             l.onFullSync(focusPage);

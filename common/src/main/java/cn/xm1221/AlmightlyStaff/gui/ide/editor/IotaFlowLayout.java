@@ -90,7 +90,10 @@ public final class IotaFlowLayout {
                 x = depth * indentPx;
             }
 
-            if (!atLineStart && (breaks.contains(i) || x + spacePx + totalW > safeMaxW)) {
+            if (i == 0 && breaks.contains(0)) {
+                row++;
+                x = depth * indentPx;
+            } else if (!atLineStart && (breaks.contains(i) || x + spacePx + totalW > safeMaxW)) {
                 row++;
                 if (item.isRetro()) {
                     depth = Math.max(0, depth - 1);

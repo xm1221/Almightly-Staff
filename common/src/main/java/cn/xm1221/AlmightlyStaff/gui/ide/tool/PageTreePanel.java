@@ -1,5 +1,6 @@
 package cn.xm1221.AlmightlyStaff.gui.ide.tool;
 
+import cn.xm1221.AlmightlyStaff.api.AlmightlyStaffIdeApi;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.Bounds;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.ContextMenuOverlay;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.FocusManager;
@@ -39,29 +40,23 @@ public final class PageTreePanel implements IdeComponent {
     public interface Callbacks {
         void onOpenSpellPage(int pageIndex);
 
-        void onOpenNote(NoteEntry note);
-
-        void onOpenExternalPatchouli();
+        void onOpenExternalScreen(AlmightlyStaffIdeApi.ExternalScreenEntry entry);
 
         void onCopyPageAsHexParse(int pageIndex);
 
         void openContextMenu(int mx, int my, List<ContextMenuOverlay.MenuItem> items);
-
-        List<NoteEntry> collectNotes();
     }
 
     private enum RowKind {
         FOLDER,
         PAGE,
-        NOTES_ROOT,
-        NOTE,
         EXTERNAL_ROOT,
         EXTERNAL_ITEM
     }
 
     private record TreeRow(RowKind kind, String id, int pageIndex, String label,
                            boolean collapsed, boolean sealed, boolean dirty, boolean casting,
-                           int indent, @Nullable NoteEntry note) {
+                           int indent, @Nullable AlmightlyStaffIdeApi.ExternalScreenEntry external) {
     }
 
     private static final int HEADER_H = 20;
@@ -77,7 +72,6 @@ public final class PageTreePanel implements IdeComponent {
     private int scroll = 0;
     private int selectedPageIndex = -1;
     private String selectedRowId = "";
-    private boolean notesExpanded = false;     // 默认折叠，不压过法术页
     private boolean externalExpanded = false;  // 默认折叠
     private boolean uncategorizedExpanded = true;
 
@@ -151,25 +145,17 @@ public final class PageTreePanel implements IdeComponent {
             for (SpellDocument doc : uncategorized) rows.add(pageRow(doc, 1));
         }
 
-        List<NoteEntry> notes = callbacks.collectNotes();
-        rows.add(new TreeRow(RowKind.NOTES_ROOT, "notes_root", 0,
-            Component.translatable("almightly_staff.ide.tree_notes").getString(),
-            !notesExpanded, false, false, false, 0, null));
-        if (notesExpanded) {
-            for (NoteEntry note : notes) {
-                rows.add(new TreeRow(RowKind.NOTE, "note:" + note.id(), 0, note.title(),
-                    false, note.readOnly(), false, false, 1, note));
-            }
-        }
-
-        if (Platform.isModLoaded("patchouli")) {
+        List<AlmightlyStaffIdeApi.ExternalScreenEntry> externals = AlmightlyStaffIdeApi.externalScreens();
+        if (!externals.isEmpty()) {
             rows.add(new TreeRow(RowKind.EXTERNAL_ROOT, "ext_root", 0,
                 Component.translatable("almightly_staff.ide.tree_external").getString(),
                 !externalExpanded, false, false, false, 0, null));
             if (externalExpanded) {
-                rows.add(new TreeRow(RowKind.EXTERNAL_ITEM, "ext:patchouli", 0,
-                    Component.translatable("almightly_staff.ide.patchouli_book").getString(),
-                    false, true, false, false, 1, null));
+                for (AlmightlyStaffIdeApi.ExternalScreenEntry entry : externals) {
+                    rows.add(new TreeRow(RowKind.EXTERNAL_ITEM, "ext:" + entry.id(), 0,
+                        entry.title().getString(),
+                        false, true, false, false, 1, entry));
+                }
             }
         }
     }
@@ -238,14 +224,21 @@ public final class PageTreePanel implements IdeComponent {
                 if (idx >= rows.size()) break;
                 TreeRow r = rows.get(idx);
                 int y = lb.y() + vi * ROW_H;
+                boolean armedDelete = r.kind() == RowKind.PAGE && r.pageIndex() == deleteConfirmPage && deleteConfirmTicks > 0;
                 boolean selected = r.id().equals(selectedRowId)
                     || (r.kind() == RowKind.PAGE && r.pageIndex() == selectedPageIndex);
                 boolean hover = mouseX >= lb.x() && mouseX < contentRight && mouseY >= y && mouseY < y + ROW_H;
-                if (selected) g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_ACTIVE);
-                else if (hover) g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_HOVER);
+                if (armedDelete) {
+                    g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, 0x44E05555);
+                    IdeTheme.drawBorder(g, lb.x() + 1, y, Math.max(2, contentRight - lb.x() - 2), ROW_H - 1, IdeTheme.RED_ERROR);
+                } else if (selected) {
+                    g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_ACTIVE);
+                } else if (hover) {
+                    g.fill(lb.x() + 1, y, contentRight - 1, y + ROW_H - 1, IdeTheme.BG_HOVER);
+                }
 
                 int ix = lb.x() + 5 + r.indent() * 10;
-                if (r.kind() == RowKind.FOLDER || r.kind() == RowKind.NOTES_ROOT || r.kind() == RowKind.EXTERNAL_ROOT) {
+                if (r.kind() == RowKind.FOLDER || r.kind() == RowKind.EXTERNAL_ROOT) {
                     IdeTheme.drawIcon(g, r.collapsed() ? IdeTheme.Icon.FOLDER_CLOSED : IdeTheme.Icon.FOLDER_OPEN,
                         ix, y + 4, IdeTheme.TEXT_MUTED);
                     ix += 11;
@@ -261,9 +254,6 @@ public final class PageTreePanel implements IdeComponent {
                         IdeTheme.drawIcon(g, IdeTheme.Icon.SPELL_STAR, ix, y + 4, IdeTheme.ACCENT_LIGHT);
                         ix += 10;
                     }
-                } else if (r.kind() == RowKind.NOTE) {
-                    IdeTheme.drawIcon(g, IdeTheme.Icon.NOTE_DOC, ix, y + 4, IdeTheme.CYAN_NOTE);
-                    ix += 10;
                 } else if (r.kind() == RowKind.EXTERNAL_ITEM) {
                     IdeTheme.drawIcon(g, IdeTheme.Icon.BOOK_EXTERNAL, ix, y + 4, IdeTheme.GOLD_SEAL_TEXT);
                     ix += 10;
@@ -279,9 +269,10 @@ public final class PageTreePanel implements IdeComponent {
                 }
 
                 String display = r.label() + (r.dirty() ? " *" : "");
-                int col = r.sealed() && r.kind() == RowKind.PAGE ? IdeTheme.GOLD_SEAL_TEXT
+                int col = armedDelete ? IdeTheme.RED_ERROR
+                    : r.sealed() && r.kind() == RowKind.PAGE ? IdeTheme.GOLD_SEAL_TEXT
                     : r.dirty() ? IdeTheme.GOLD_SEAL_TEXT
-                    : (r.kind() == RowKind.FOLDER || r.kind() == RowKind.NOTES_ROOT || r.kind() == RowKind.EXTERNAL_ROOT)
+                    : (r.kind() == RowKind.FOLDER || r.kind() == RowKind.EXTERNAL_ROOT)
                     ? IdeTheme.TEXT_MUTED : IdeTheme.TEXT_MAIN;
                 g.drawString(font, IdeTheme.trimText(font, display, Math.max(8, contentRight - ix - 4)),
                     ix, y + 4, col, false);
@@ -384,7 +375,6 @@ public final class PageTreePanel implements IdeComponent {
             lastClickMs = now;
             switch (row.kind()) {
                 case FOLDER -> toggleFolder(row.id());
-                case NOTES_ROOT -> notesExpanded = !notesExpanded;
                 case EXTERNAL_ROOT -> externalExpanded = !externalExpanded;
                 case PAGE -> {
                     selectedPageIndex = row.pageIndex();
@@ -400,11 +390,8 @@ public final class PageTreePanel implements IdeComponent {
                         dragMouseY = my;
                     }
                 }
-                case NOTE -> {
-                    if (dbl && row.note() != null) callbacks.onOpenNote(row.note());
-                }
                 case EXTERNAL_ITEM -> {
-                    if (dbl) callbacks.onOpenExternalPatchouli();
+                    if (dbl && row.external() != null) callbacks.onOpenExternalScreen(row.external());
                 }
             }
             return true;
@@ -415,11 +402,11 @@ public final class PageTreePanel implements IdeComponent {
                 openPageMenu((int) mx, (int) my, row);
             } else if (row.kind() == RowKind.FOLDER && !"folder:__root__".equals(row.id())) {
                 openFolderMenu((int) mx, (int) my, row.id().substring("folder:".length()), row.label());
-            } else if (row.kind() == RowKind.NOTE && row.note() != null) {
-                NoteEntry n = row.note();
+            } else if (row.kind() == RowKind.EXTERNAL_ITEM && row.external() != null) {
+                AlmightlyStaffIdeApi.ExternalScreenEntry entry = row.external();
                 callbacks.openContextMenu((int) mx, (int) my, List.of(
-                    new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.open_note"),
-                        true, () -> callbacks.onOpenNote(n))
+                    new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.open_page"),
+                        true, () -> callbacks.onOpenExternalScreen(entry))
                 ));
             }
             return true;
@@ -468,8 +455,6 @@ public final class PageTreePanel implements IdeComponent {
         List<ContextMenuOverlay.MenuItem> items = List.of(
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.open_page"),
                 true, () -> callbacks.onOpenSpellPage(page)),
-            new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.set_cast_page"),
-                true, () -> session.selectCastPage(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.ide.rename"),
                 true, () -> beginPageRename(page)),
             new ContextMenuOverlay.MenuItem(Component.translatable("almightly_staff.gui.copy"),
@@ -511,8 +496,8 @@ public final class PageTreePanel implements IdeComponent {
             session.deletePage(page);
         } else {
             deleteConfirmPage = page;
-            deleteConfirmTicks = 60;
-            session.toast().show(Component.translatable("almightly_staff.gui.confirm_delete").getString());
+            deleteConfirmTicks = 80;
+            session.toast().show(Component.translatable("almightly_staff.ide.confirm_delete_again").getString());
         }
     }
 

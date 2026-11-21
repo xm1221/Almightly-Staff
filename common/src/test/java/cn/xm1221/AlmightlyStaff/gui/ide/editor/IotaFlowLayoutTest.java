@@ -1,5 +1,6 @@
 package cn.xm1221.AlmightlyStaff.gui.ide.editor;
 
+import cn.xm1221.AlmightlyStaff.gui.ide.model.WorkspaceState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class IotaFlowLayoutTest {
 
@@ -64,5 +66,29 @@ class IotaFlowLayoutTest {
 
         IotaFlowLayout.Result withBreak = IotaFlowLayout.layout(items, i -> 20, 200, 14, 12, Set.of(1));
         assertEquals(1, withBreak.tokens().get(1).row());
+
+        // 首行与末尾换行测试
+        IotaFlowLayout.Result leadAndTrail = IotaFlowLayout.layout(
+            items, i -> 20, i -> 0, 200, 14, 12, 4, Set.of(0, 2), Map.of());
+        assertEquals(1, leadAndTrail.tokens().get(0).row());
+        assertEquals(2, leadAndTrail.anchors().get(2).row());
+        assertEquals(3, leadAndTrail.totalRows());
+    }
+
+    @Test
+    void formattingShiftsOnInsertAndRemove() {
+        WorkspaceState ws = WorkspaceState.createDefault();
+        ws.setLineBreaksForPage(1, Set.of(1, 3));
+        ws.setSpacesForPage(1, Map.of(2, 1, 3, 2));
+
+        // 在索引 1 处插入 2 个元素：原 1 留在 1（光标当前位置之后插入的新元素从该行开始），>1 的 2,3 顺移为 4,5
+        assertTrue(ws.shiftFormattingOnInsert(1, 1, 2));
+        assertEquals(Set.of(1, 5), ws.lineBreaksForPage(1));
+        assertEquals(Map.of(4, 1, 5, 2), ws.spacesForPage(1));
+
+        // 删除索引 2（即 1 之后的元素）：4,5 回移为 3,4
+        assertTrue(ws.shiftFormattingOnRemove(1, Set.of(2), 4));
+        assertEquals(Set.of(1, 4), ws.lineBreaksForPage(1));
+        assertEquals(Map.of(3, 1, 4, 2), ws.spacesForPage(1));
     }
 }

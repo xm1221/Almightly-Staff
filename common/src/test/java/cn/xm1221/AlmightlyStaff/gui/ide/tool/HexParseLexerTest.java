@@ -27,6 +27,18 @@ class HexParseLexerTest {
     }
 
     @Test
+    void highlightsPatternIdsContainingSlashAndMask() {
+        Set<String> known = Set.of("hexcasting:entity_pos/eye", "entity_pos/eye", "hexcasting:const/vec/px", "const/vec/px");
+        List<HexParseLexer.Token> tokens = HexParseLexer.tokenizeLine(
+            "entity_pos/eye, (hexcasting:const/vec/px), mask_v-- // end", known);
+
+        assertTrue(tokens.stream().anyMatch(t -> t.type() == HexParseLexer.TokenType.PATTERN_KNOWN && t.text().equals("entity_pos/eye")));
+        assertTrue(tokens.stream().anyMatch(t -> t.type() == HexParseLexer.TokenType.PATTERN_KNOWN && t.text().equals("hexcasting:const/vec/px")));
+        assertTrue(tokens.stream().anyMatch(t -> t.type() == HexParseLexer.TokenType.PATTERN_KNOWN && t.text().equals("mask_v--")));
+        assertTrue(tokens.stream().anyMatch(t -> t.type() == HexParseLexer.TokenType.COMMENT && t.text().equals("// end")));
+    }
+
+    @Test
     void checksBalancedAndUnmatchedBracketsIgnoringComments() {
         assertTrue(HexParseLexer.checkBrackets("{\n// }\nget_caster\n}").balanced());
 

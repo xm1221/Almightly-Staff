@@ -20,6 +20,8 @@ import net.minecraft.client.gui.font.TextFieldHelper;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -52,8 +54,6 @@ public final class IotaTextEditorView implements IdeComponent {
         void onActivePageChanged(@Nullable SpellDocument doc);
 
         void onDocumentMutated(SpellDocument doc, String source);
-
-        void onSetCastPage(int pageIndex);
     }
 
     public static final class PageTabState {
@@ -185,10 +185,14 @@ public final class IotaTextEditorView implements IdeComponent {
         if (doc == null || st == null || doc.isSealed() || tags == null || tags.isEmpty()) return;
         int at = activeCursorIndex();
         if (doc.insertAt(at, tags, source)) {
+            if (session.workspace().shiftFormattingOnInsert(doc.pageIndex(), at, tags.size())) {
+                session.saveWorkspace();
+            }
             st.selectedIndices.clear();
             for (int i = 0; i < tags.size(); i++) st.selectedIndices.add(at + i);
             st.selectionAnchor = at;
             st.cursorIndex = at + tags.size();
+            ensureCursorVisible();
             callbacks.onDocumentMutated(doc, source);
         }
     }
@@ -394,20 +398,20 @@ public final class IotaTextEditorView implements IdeComponent {
                 boolean sel = st.selectedIndices.contains(tok.index());
                 boolean hov = tok.index() == hoverToken;
                 if (sel) {
-                    g.fill(rx - 1, ry + 1, rx + tok.dispW() + 1, ry + tok.h() - 1, 0x88493662);
+                    g.fill(rx - 1, ry + 1, rx + tok.dispW() + 1, ry + tok.h() - 1, 0x33FFAA00);
                 } else if (hov) {
                     g.fill(rx - 1, ry + 1, rx + tok.dispW() + 1, ry + tok.h() - 1, 0x44303744);
                 }
 
                 Component disp = IotaType.getDisplay(doc.iotasView().get(tok.index()));
                 if (sel) {
-                    g.drawString(font, disp.getString(), rx, ry + 3, 0xFFFFFFFF, false);
+                    g.drawString(font, recolorComponent(disp, 0xFFAA00), rx, ry + 3, 0xFFFFAA00, false);
                 } else {
-                    g.drawString(font, disp, rx, ry + 3, tok.color(), false);
+                    g.drawString(font, disp, rx, ry + 3, 0xFFFFFFFF, false);
                 }
 
                 if (tok.hasComma()) {
-                    g.drawString(font, ", ", rx + tok.dispW(), ry + 3, IdeTheme.TEXT_MUTED, false);
+                    g.drawString(font, ", ", rx + tok.dispW(), ry + 3, sel ? 0xFFFFAA00 : 0xFFCCCCCC, false);
                 }
             }
 
@@ -427,6 +431,15 @@ public final class IotaTextEditorView implements IdeComponent {
             }
         }
         IdeTheme.drawScrollbar(g, contentRight, body.y(), body.h(), contentH, body.h(), st.scrollY);
+    }
+
+    private static MutableComponent recolorComponent(Component src, int rgb) {
+        TextColor tc = TextColor.fromRgb(rgb & 0xFFFFFF);
+        MutableComponent copy = src.plainCopy().setStyle(src.getStyle().withColor(tc));
+        for (Component sibling : src.getSiblings()) {
+            copy.append(recolorComponent(sibling, rgb));
+        }
+        return copy;
     }
 
     @Override
@@ -560,12 +573,15 @@ public final class IotaTextEditorView implements IdeComponent {
     }
 
     private void toggleManualLineBreak(int pageIndex, int cursorPos) {
+        SpellDocument doc = session.document(pageIndex);
+        if (doc == null || doc.size() == 0) return;
         Set<Integer> breaks = session.workspace().lineBreaksForPage(pageIndex);
         if (!breaks.remove(cursorPos)) {
             breaks.add(cursorPos);
         }
         session.workspace().setLineBreaksForPage(pageIndex, breaks);
         session.saveWorkspace();
+        ensureCursorVisible();
     }
 
     private void addManualSpace(int pageIndex, int cursorPos) {
@@ -701,7 +717,11 @@ public final class IotaTextEditorView implements IdeComponent {
                 if (cur > 0) {
                     int target = cur - 1;
                     if (doc.removeIndices(List.of(target), "text")) {
+                        if (session.workspace().shiftFormattingOnRemove(doc.pageIndex(), Set.of(target), doc.size())) {
+                            session.saveWorkspace();
+                        }
                         st.cursorIndex = target;
+                        ensureCursorVisible();
                         callbacks.onDocumentMutated(doc, "text");
                     }
                     return true;
@@ -710,21 +730,70 @@ public final class IotaTextEditorView implements IdeComponent {
         }
         if (keyCode == GLFW.GLFW_KEY_LEFT) {
             st.cursorIndex = Math.max(0, activeCursorIndex() - 1);
+            ensureCursorVisible();
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_RIGHT) {
             st.cursorIndex = Math.min(doc.size(), activeCursorIndex() + 1);
+            ensureCursorVisible();
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN) {
+            moveCursorVertically(keyCode == GLFW.GLFW_KEY_UP ? -1 : 1);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_HOME) {
             st.cursorIndex = 0;
+            ensureCursorVisible();
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_END) {
             st.cursorIndex = doc.size();
+            ensureCursorVisible();
             return true;
         }
         return false;
+    }
+
+    private void moveCursorVertically(int rowDelta) {
+        PageTabState st = activeTabState();
+        if (st == null || lastLayout == null) return;
+        int cur = activeCursorIndex();
+        IotaFlowLayout.CursorAnchor current = null;
+        for (IotaFlowLayout.CursorAnchor a : lastLayout.anchors()) {
+            if (a.cursorIndex() == cur) {
+                current = a;
+                break;
+            }
+        }
+        if (current == null) return;
+        int nextRow = Mth.clamp(current.row() + rowDelta, 0, Math.max(0, lastLayout.totalRows() - 1));
+        if (nextRow == current.row()) return;
+        st.cursorIndex = lastLayout.cursorAt(current.x(), nextRow * ROW_H + ROW_H / 2.0, ROW_H);
+        ensureCursorVisible();
+    }
+
+    private void ensureCursorVisible() {
+        PageTabState st = activeTabState();
+        Bounds body = bodyBounds();
+        if (st == null || body.isEmpty()) return;
+        Font font = Minecraft.getInstance().font;
+        rebuildFlowLayout(font);
+        if (lastLayout == null) return;
+        int cur = activeCursorIndex();
+        for (IotaFlowLayout.CursorAnchor a : lastLayout.anchors()) {
+            if (a.cursorIndex() == cur) {
+                int topY = a.y() + 6;
+                int botY = topY + a.h();
+                if (topY - st.scrollY < 4) {
+                    st.scrollY = Math.max(0, topY - 6);
+                } else if (botY - st.scrollY > body.h() - 4) {
+                    int maxScroll = Math.max(0, lastLayout.totalRows() * ROW_H + 16 - body.h());
+                    st.scrollY = Mth.clamp(botY - body.h() + 6, 0, maxScroll);
+                }
+                break;
+            }
+        }
     }
 
     @Override
@@ -757,11 +826,16 @@ public final class IotaTextEditorView implements IdeComponent {
         SpellDocument doc = activeDocument();
         PageTabState st = activeTabState();
         if (doc == null || st == null || doc.isSealed() || st.selectedIndices.isEmpty()) return;
-        int min = Collections.min(st.selectedIndices);
-        if (doc.removeIndices(st.selectedIndices, "text")) {
+        Set<Integer> removed = new LinkedHashSet<>(st.selectedIndices);
+        int min = Collections.min(removed);
+        if (doc.removeIndices(removed, "text")) {
+            if (session.workspace().shiftFormattingOnRemove(doc.pageIndex(), removed, doc.size())) {
+                session.saveWorkspace();
+            }
             st.selectedIndices.clear();
             st.selectionAnchor = -1;
             st.cursorIndex = Math.min(min, doc.size());
+            ensureCursorVisible();
             callbacks.onDocumentMutated(doc, "text");
         }
     }
@@ -772,16 +846,25 @@ public final class IotaTextEditorView implements IdeComponent {
         List<CompoundTag> clip = session.clipboard();
         if (doc == null || st == null || doc.isSealed() || clip.isEmpty()) return;
         int at = activeCursorIndex();
+        boolean fmtChanged = false;
         if (!st.selectedIndices.isEmpty()) {
-            at = Collections.min(st.selectedIndices);
-            doc.removeIndices(st.selectedIndices, "text");
+            Set<Integer> removed = new LinkedHashSet<>(st.selectedIndices);
+            at = Collections.min(removed);
+            if (doc.removeIndices(removed, "text")) {
+                fmtChanged |= session.workspace().shiftFormattingOnRemove(doc.pageIndex(), removed, doc.size());
+            }
         }
         if (doc.insertAt(at, clip, "text")) {
+            fmtChanged |= session.workspace().shiftFormattingOnInsert(doc.pageIndex(), at, clip.size());
+            if (fmtChanged) session.saveWorkspace();
             st.selectedIndices.clear();
             for (int i = 0; i < clip.size(); i++) st.selectedIndices.add(at + i);
             st.selectionAnchor = at;
             st.cursorIndex = at + clip.size();
+            ensureCursorVisible();
             callbacks.onDocumentMutated(doc, "text");
+        } else if (fmtChanged) {
+            session.saveWorkspace();
         }
     }
 }

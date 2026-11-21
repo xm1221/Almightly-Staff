@@ -3,12 +3,8 @@ package cn.xm1221.AlmightlyStaff.forge;
 import at.petrak.hexcasting.common.lib.HexCreativeTabs;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
 import cn.xm1221.AlmightlyStaff.items.AlmightlyStaffItems;
-import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.recipe.AlmightlyStaffRecipes;
 import dev.architectury.platform.forge.EventBuses;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Rarity;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
@@ -30,18 +26,6 @@ public final class AlmightlyStaffModForge {
         // Run our common setup once during mod construction (must not run inside RegisterEvent, which fires per registry key).
         AlmightlyStaffMod.init();
         context.getModEventBus().addListener((RegisterEvent event) -> {
-            if (event.getRegistryKey().equals(ForgeRegistries.Keys.ITEMS)) {
-                event.register(ForgeRegistries.Keys.ITEMS, helper -> {
-                    helper.register(
-                            ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID, "all_in_one"),
-                           AlmightlyStaffMod.ALL_IN_ONE
-                    );
-                    helper.register(
-                            ResourceLocation.fromNamespaceAndPath(AlmightlyStaffMod.MOD_ID,"homeless_bottle"),
-                            AlmightlyStaffMod.HOME_BOTTLE
-                    );
-                });
-            }
             // 封印万法之杖的合成配方（无序：未封存法杖 + 封存材料）
             if (event.getRegistryKey().equals(ForgeRegistries.Keys.RECIPE_SERIALIZERS)) {
                 event.<RecipeSerializer<?>>register(ForgeRegistries.Keys.RECIPE_SERIALIZERS, helper ->

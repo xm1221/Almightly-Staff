@@ -20,6 +20,9 @@ public final class FloatingWindow {
 
     private final String id;
     private final Component title;
+    @Nullable
+    private final IdeTheme.Icon icon;
+    private final boolean showTitle;
     private final IdeComponent content;
     private final int minW;
     private final int minH;
@@ -38,8 +41,16 @@ public final class FloatingWindow {
 
     public FloatingWindow(String id, Component title, IdeComponent content, Bounds initialBounds,
                           int minW, int minH, @Nullable Runnable onMinimize, @Nullable Runnable onClose) {
+        this(id, title, null, true, content, initialBounds, minW, minH, onMinimize, onClose);
+    }
+
+    public FloatingWindow(String id, Component title, @Nullable IdeTheme.Icon icon, boolean showTitle,
+                          IdeComponent content, Bounds initialBounds,
+                          int minW, int minH, @Nullable Runnable onMinimize, @Nullable Runnable onClose) {
         this.id = id;
         this.title = title;
+        this.icon = icon;
+        this.showTitle = showTitle;
         this.content = content;
         this.minW = Math.max(160, minW);
         this.minH = Math.max(110, minH);
@@ -130,9 +141,16 @@ public final class FloatingWindow {
             g.fill(header.x(), header.y(), header.right(), header.y() + 2, IdeTheme.ACCENT);
         }
 
-        int textRight = onMinimize != null ? minBtnBounds().x() - 4 : maxBtnBounds().x() - 4;
-        IdeTheme.drawClippedString(g, font, title, header.x() + 6, header.y() + 5,
-            Math.max(10, textRight - header.x() - 6), focused ? IdeTheme.TEXT_MAIN : IdeTheme.TEXT_MUTED);
+        int textX = header.x() + 6;
+        if (icon != null) {
+            IdeTheme.drawIcon(g, icon, header.x() + 6, header.y() + 6, focused ? IdeTheme.ACCENT_LIGHT : IdeTheme.TEXT_MUTED);
+            textX = header.x() + (icon.size() > 8 ? 20 : 16);
+        }
+        if (showTitle) {
+            int textRight = onMinimize != null ? minBtnBounds().x() - 4 : maxBtnBounds().x() - 4;
+            IdeTheme.drawClippedString(g, font, title, textX, header.y() + 5,
+                Math.max(10, textRight - textX), focused ? IdeTheme.TEXT_MAIN : IdeTheme.TEXT_MUTED);
+        }
 
         Bounds minB = minBtnBounds();
         if (!minB.isEmpty()) {
@@ -163,6 +181,10 @@ public final class FloatingWindow {
             int rx = bounds.right() - 2, by = bounds.bottom() - 2;
             g.fill(rx - 6, by, rx, by + 1, IdeTheme.TEXT_MUTED);
             g.fill(rx - 3, by - 3, rx, by - 2, IdeTheme.TEXT_MUTED);
+        }
+        if (!showTitle && icon != null && mouseX >= header.x() + 2 && mouseX < header.x() + 18
+            && mouseY >= header.y() && mouseY < header.bottom()) {
+            g.renderTooltip(font, title, mouseX, mouseY);
         }
     }
 

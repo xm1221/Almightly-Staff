@@ -41,7 +41,10 @@ public final class CastCollectPanel implements IdeComponent {
     @Nullable
     private GuiSpellcasting spellcasting;
     private float hexSize = 20.0f;
+    private float panX = 0.0f;
+    private float panY = 0.0f;
     private boolean mouseHeld = false;
+    private boolean panning = false;
     private int stackScroll = 0;
 
     public CastCollectPanel(IdeSession session, Consumer<List<CompoundTag>> collectCallback) {
@@ -99,7 +102,26 @@ public final class CastCollectPanel implements IdeComponent {
         Bounds cb = canvasBounds();
         IdeSpellcastingAccess ia = as(spellcasting);
         ia.setHexSizeOverride$ide(hexSize);
-        ia.setCoordsOffsetOverride$ide(new Vec2(cb.x() + cb.w() / 2.0f, cb.y() + cb.h() / 2.0f));
+        ia.setCoordsOffsetOverride$ide(new Vec2(cb.x() + cb.w() / 2.0f + panX, cb.y() + cb.h() / 2.0f + panY));
+    }
+
+    private void adjustZoom(float delta) {
+        hexSize = Mth.clamp(hexSize + delta, 12.0f, 40.0f);
+        updateOffset();
+    }
+
+    public boolean hasUnfinishedStroke() {
+        if (spellcasting == null) return false;
+        IdeSpellcastingAccess ia = as(spellcasting);
+        return ia.isDrawing$ide();
+    }
+
+    public boolean cancelUnfinishedStroke() {
+        if (!hasUnfinishedStroke()) return false;
+        IdeSpellcastingAccess ia = as(spellcasting);
+        ia.cancelStroke$ide();
+        mouseHeld = false;
+        return true;
     }
 
     public void onServerUpdate(ExecutionClientView info, int index) {
@@ -114,6 +136,7 @@ public final class CastCollectPanel implements IdeComponent {
 
     public void dispose() {
         mouseHeld = false;
+        panning = false;
         stopSound();
     }
 
@@ -144,24 +167,22 @@ public final class CastCollectPanel implements IdeComponent {
         Font font = Minecraft.getInstance().font;
         IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.ROOT);
 
-        // 顶部控制条（明确提示会消耗媒质）
+        // 顶部控制条（明确提示会消耗媒质，并提供网格缩放/居中）
         Bounds tb = toolbarBounds();
         IdeTheme.drawNineSlice(g, tb, IdeTheme.NineSlice.PANEL);
         try (IdeScissor.Scope sc = IdeScissor.push(g, tb)) {
-            int x = tb.x() + 4;
             int y = tb.y() + 2;
             String startTxt = Component.translatable("almightly_staff.ide.cast_reset").getString();
-            int startW = font.width(startTxt) + 10;
-            drawBtn(g, font, x, y, startW, 15, startTxt, false, mouseX, mouseY);
-            x += startW + 4;
-
             String collectTxt = Component.translatable("almightly_staff.ide.collect_stack").getString();
-            int colW = font.width(collectTxt) + 10;
-            drawBtn(g, font, x, y, colW, 15, collectTxt, true, mouseX, mouseY);
-            x += colW + 8;
+            int[] xs = toolbarOffsets(font, tb, startTxt, collectTxt);
+            drawBtn(g, font, xs[0], y, xs[1], 15, startTxt, false, mouseX, mouseY);
+            drawBtn(g, font, xs[2], y, xs[3], 15, collectTxt, true, mouseX, mouseY);
+            drawBtn(g, font, xs[4], y, 14, 15, "-", false, mouseX, mouseY);
+            drawBtn(g, font, xs[5], y, 14, 15, "+", false, mouseX, mouseY);
+            drawIconBtn(g, xs[6], y, 14, 15, IdeTheme.Icon.CENTER_RESET, mouseX, mouseY);
 
             IdeTheme.drawClippedString(g, font, Component.translatable("almightly_staff.ide.cast_media_warn"),
-                x, y + 3, Math.max(0, tb.right() - x - 4), IdeTheme.GOLD_SEAL_TEXT);
+                xs[7], y + 3, Math.max(0, tb.right() - xs[7] - 4), IdeTheme.GOLD_SEAL_TEXT);
         }
 
         // 左：施法画布
@@ -227,6 +248,18 @@ public final class CastCollectPanel implements IdeComponent {
         }
     }
 
+    private static int[] toolbarOffsets(Font font, Bounds tb, String startTxt, String collectTxt) {
+        int x0 = tb.x() + 4;
+        int startW = font.width(startTxt) + 10;
+        int x1 = x0 + startW + 4;
+        int colW = font.width(collectTxt) + 10;
+        int minusX = x1 + colW + 4;
+        int plusX = minusX + 16;
+        int centerX = plusX + 16;
+        int warnX = centerX + 18;
+        return new int[]{x0, startW, x1, colW, minusX, plusX, centerX, warnX};
+    }
+
     private static void drawBtn(GuiGraphics g, Font font, int x, int y, int w, int h,
                                 String txt, boolean primary, int mx, int my) {
         boolean hov = mx >= x && mx < x + w && my >= y && my < y + h;
@@ -236,6 +269,26 @@ public final class CastCollectPanel implements IdeComponent {
         g.drawCenteredString(font, txt, x + w / 2, y + 4, IdeTheme.TEXT_MAIN);
     }
 
+    private static void drawIconBtn(GuiGraphics g, int x, int y, int w, int h, IdeTheme.Icon icon, int mx, int my) {
+        boolean hov = mx >= x && mx < x + w && my >= y && my < y + h;
+        IdeTheme.drawNineSlice(g, x, y, w, h, hov ? IdeTheme.NineSlice.BTN_HOVER : IdeTheme.NineSlice.BTN_NORMAL);
+        IdeTheme.drawIcon(g, icon, x + (w - 8) / 2, y + (h - 8) / 2, IdeTheme.TEXT_MAIN);
+    }
+
+    @Override
+    public void renderOverlay(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        Bounds tb = toolbarBounds();
+        if (!tb.contains(mouseX, mouseY)) return;
+        Font font = Minecraft.getInstance().font;
+        String startTxt = Component.translatable("almightly_staff.ide.cast_reset").getString();
+        String collectTxt = Component.translatable("almightly_staff.ide.collect_stack").getString();
+        int[] xs = toolbarOffsets(font, tb, startTxt, collectTxt);
+        int centerX = xs[6];
+        if (mouseX >= centerX && mouseX < centerX + 14 && mouseY >= tb.y() + 2 && mouseY < tb.y() + 17) {
+            g.renderTooltip(font, Component.translatable("almightly_staff.ide.grid_center"), mouseX, mouseY);
+        }
+    }
+
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (!bounds.contains(mx, my)) return false;
@@ -243,15 +296,15 @@ public final class CastCollectPanel implements IdeComponent {
         Bounds tb = toolbarBounds();
         if (tb.contains(mx, my) && button == 0) {
             Font font = Minecraft.getInstance().font;
-            int x = tb.x() + 4;
-            int startW = font.width(Component.translatable("almightly_staff.ide.cast_reset").getString()) + 10;
-            if (mx >= x && mx < x + startW) {
+            String startTxt = Component.translatable("almightly_staff.ide.cast_reset").getString();
+            String collectTxt = Component.translatable("almightly_staff.ide.collect_stack").getString();
+            int[] xs = toolbarOffsets(font, tb, startTxt, collectTxt);
+            if (my < tb.y() + 2 || my >= tb.y() + 17) return true;
+            if (mx >= xs[0] && mx < xs[0] + xs[1]) {
                 beginFreshSession();
                 return true;
             }
-            x += startW + 4;
-            int colW = font.width(Component.translatable("almightly_staff.ide.collect_stack").getString()) + 10;
-            if (mx >= x && mx < x + colW && spellcasting != null) {
+            if (mx >= xs[2] && mx < xs[2] + xs[3] && spellcasting != null) {
                 IdeSpellcastingAccess ia = as(spellcasting);
                 List<CompoundTag> stack = ia.getStack$ide();
                 if (!stack.isEmpty()) {
@@ -259,9 +312,27 @@ public final class CastCollectPanel implements IdeComponent {
                 }
                 return true;
             }
+            if (mx >= xs[4] && mx < xs[4] + 14) {
+                adjustZoom(-2.0f);
+                return true;
+            }
+            if (mx >= xs[5] && mx < xs[5] + 14) {
+                adjustZoom(2.0f);
+                return true;
+            }
+            if (mx >= xs[6] && mx < xs[6] + 14) {
+                panX = 0.0f;
+                panY = 0.0f;
+                updateOffset();
+                return true;
+            }
             return true;
         }
         if (canvasBounds().contains(mx, my) && spellcasting != null) {
+            if (button == 1 || button == 2) {
+                panning = true;
+                return true;
+            }
             if (button == 0) mouseHeld = true;
             spellcasting.mouseClicked(mx, my, button);
             return true;
@@ -271,6 +342,11 @@ public final class CastCollectPanel implements IdeComponent {
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
+        if (button == 1 || button == 2) {
+            boolean was = panning;
+            panning = false;
+            return was;
+        }
         if (button == 0) mouseHeld = false;
         if (spellcasting != null && (canvasBounds().contains(mx, my) || !mouseHeld)) {
             spellcasting.mouseReleased(mx, my, button);
@@ -281,6 +357,12 @@ public final class CastCollectPanel implements IdeComponent {
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (panning && (button == 1 || button == 2)) {
+            panX += (float) dx;
+            panY += (float) dy;
+            updateOffset();
+            return true;
+        }
         if (button == 0 && mouseHeld && spellcasting != null) {
             spellcasting.mouseDragged(mx, my, button, dx, dy);
             return true;
@@ -306,8 +388,7 @@ public final class CastCollectPanel implements IdeComponent {
             stackScroll = Mth.clamp(stackScroll - (int) Math.signum(delta), 0, Math.max(0, total - visible));
             return true;
         }
-        hexSize = Mth.clamp(hexSize + (float) Math.signum(delta) * 2.0f, 12.0f, 36.0f);
-        updateOffset();
+        adjustZoom((float) Math.signum(delta) * 2.0f);
         return true;
     }
 

@@ -555,6 +555,22 @@ public final class StaffPages {
             }
         }
 
+        Map<String, Boolean> compSeals = stack.get(HexDataComponents.SPELLBOOK_PAGE_SEALS.get());
+        if (compSeals != null) {
+            for (Map.Entry<String, Boolean> entry : compSeals.entrySet()) {
+                int idx;
+                try {
+                    idx = Integer.parseInt(entry.getKey());
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+                if (!validIndex(idx)) continue;
+                if (Boolean.TRUE.equals(entry.getValue())) {
+                    setSealed(root, idx, true);
+                }
+            }
+        }
+
         if (ItemSpellbook.isSealed(stack)) {
             setSealed(root, castPage(root), true);
         }
@@ -572,6 +588,7 @@ public final class StaffPages {
 
         Map<String, Iota> pagesMap = new HashMap<>();
         Map<String, Component> namesMap = new HashMap<>();
+        Map<String, Boolean> sealsMap = new HashMap<>();
         for (int idx : indices(root)) {
             String key = keyOf(idx);
             List<CompoundTag> tags = contentTags(root, idx);
@@ -580,12 +597,14 @@ public final class StaffPages {
                 Iota parsed = deserializeIota(t);
                 if (parsed != null) iotas.add(parsed);
             }
-            if (!iotas.isEmpty()) {
-                pagesMap.put(key, new ListIota(iotas));
-            }
+            // 空页也写入空 ListIota 到 SPELLBOOK_PAGES，保证 ItemSpellbook.arePagesEmpty / getPage / highestPage 感知该页
+            pagesMap.put(key, new ListIota(iotas));
             String pageName = name(root, idx);
             if (!pageName.isEmpty()) {
                 namesMap.put(key, Component.literal(pageName));
+            }
+            if (isSealed(root, idx)) {
+                sealsMap.put(key, Boolean.TRUE);
             }
         }
         if (pagesMap.isEmpty()) {
@@ -598,6 +617,12 @@ public final class StaffPages {
             stack.remove(HexDataComponents.SPELLBOOK_PAGE_NAMES.get());
         } else {
             stack.set(HexDataComponents.SPELLBOOK_PAGE_NAMES.get(), namesMap);
+        }
+
+        if (sealsMap.isEmpty()) {
+            stack.remove(HexDataComponents.SPELLBOOK_PAGE_SEALS.get());
+        } else {
+            stack.set(HexDataComponents.SPELLBOOK_PAGE_SEALS.get(), sealsMap);
         }
 
         int cp = castPage(root);

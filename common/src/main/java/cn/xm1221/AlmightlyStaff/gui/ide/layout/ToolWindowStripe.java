@@ -49,10 +49,13 @@ public final class ToolWindowStripe implements IdeComponent {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         if (bounds.isEmpty()) return;
         IdeTheme.drawNineSlice(g, bounds, IdeTheme.NineSlice.PANEL);
-        if (rightSide) {
-            g.fill(bounds.x(), bounds.y(), bounds.x() + 1, bounds.bottom(), IdeTheme.BORDER);
-        } else {
-            g.fill(bounds.right() - 1, bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BORDER);
+        int edgeT = Math.min(bounds.w() / 2, IdeTheme.borderThickness());
+        if (edgeT > 0) {
+            if (rightSide) {
+                g.fill(bounds.x(), bounds.y(), bounds.x() + edgeT, bounds.bottom(), IdeTheme.BORDER);
+            } else {
+                g.fill(bounds.right() - edgeT, bounds.y(), bounds.right(), bounds.bottom(), IdeTheme.BORDER);
+            }
         }
 
         try (IdeScissor.Scope sc = IdeScissor.push(g, bounds)) {

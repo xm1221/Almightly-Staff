@@ -2,11 +2,14 @@ package cn.xm1221.AlmightlyStaff.client;
 
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffConfig;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffMod;
+import cn.xm1221.AlmightlyStaff.gui.StaffCastScreen;
 import cn.xm1221.AlmightlyStaff.gui.ide.StaffIdeScreen;
 import cn.xm1221.AlmightlyStaff.gui.ide.host.EmbeddedScreenHost;
 import cn.xm1221.AlmightlyStaff.items.ItemAlmightlyStaff;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
 import cn.xm1221.AlmightlyStaff.gui.StaffLibScreen;
+import cn.xm1221.MieLib.registry.SpellcastingClientEvents;
+import net.minecraft.resources.ResourceLocation;
 import at.petrak.hexcasting.api.item.MediaHolderItem;
 import at.petrak.hexcasting.common.items.magic.ItemMediaBattery;
 import at.petrak.hexcasting.common.items.storage.ItemFocus;
@@ -44,6 +47,17 @@ public class AlmightlyStaffKeybinds {
     public static void init() {
         KeyMappingRegistry.register(MODE_KEY);
         KeyMappingRegistry.register(IDE_KEY);
+
+        SpellcastingClientEvents.registerServerUpdatePost(
+            new ResourceLocation(AlmightlyStaffMod.MOD_ID, "cast_screen_forward"),
+            (info, index, screen) -> {
+                if (screen instanceof StaffCastScreen scs) {
+                    scs.onServerUpdate(info, index);
+                } else if (screen instanceof StaffIdeScreen ide) {
+                    ide.onSpellcastingServerUpdate(info, index);
+                }
+            }
+        );
 
         // 注册 hexcasting:variant 属性，用于模型变体切换
         IClientXplatAbstractions.INSTANCE.registerItemProperty(

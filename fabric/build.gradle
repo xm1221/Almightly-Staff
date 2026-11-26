@@ -1,5 +1,6 @@
 plugins {
     id 'com.github.johnrengelman.shadow'
+    id 'me.modmuss50.mod-publish-plugin'
 }
 
 architectury {
@@ -41,6 +42,8 @@ dependencies {
 
     modApi "com.terraformersmc:modmenu:$rootProject.mod_menu_version"
     modImplementation "at.petra-k.hexcasting:hexcasting-fabric-1.20.1:$rootProject.hexcasting_version"
+    modApi("cn.xm1221.MieLib:mielib-fabric:${rootProject.mielib_version}") { transitive = false }
+    include("cn.xm1221.MieLib:mielib-fabric:${rootProject.mielib_version}")
     modImplementation("net.fabricmc:fabric-language-kotlin:1.13.9+kotlin.2.3.10")
     modApi "me.shedaniel.cloth:cloth-config:${rootProject.cloth_config_version}"
 
@@ -63,4 +66,32 @@ shadowJar {
 
 remapJar {
     input.set shadowJar.archiveFile
+}
+
+publishMods {
+    def isCI = (System.getenv("CI") ?: "").trim().length() > 0
+    def isDryRun = (System.getenv("DRY_RUN") ?: "").trim().length() > 0
+    dryRun = !isCI || isDryRun
+
+    file = remapJar.archiveFile
+    modLoaders.add("fabric")
+    type = STABLE
+    displayName = "Almightly Staff ${project.version} [Fabric]"
+    changelog = rootProject.publishMods.changelog
+
+    modrinth {
+        accessToken = System.getenv("MODRINTH_TOKEN") ?: ""
+        projectId = rootProject.modrinth_id
+        minecraftVersions.add(rootProject.minecraft_version)
+        requires("architectury-api")
+        requires("fabric-api")
+        requires("fabric-language-kotlin")
+        requires("hex-casting")
+        requires("cloth-config")
+        optional("modmenu")
+    }
+
+    github {
+        parent(rootProject.tasks.named("publishGithub"))
+    }
 }

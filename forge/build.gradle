@@ -1,5 +1,6 @@
 plugins {
     id 'com.github.johnrengelman.shadow'
+    id 'me.modmuss50.mod-publish-plugin'
 }
 
 loom {
@@ -49,6 +50,8 @@ dependencies {
     implementation(include("io.github.llamalad7:mixinextras-forge:0.5.0"))
     implementation ("at.petra-k.paucal:paucal-forge-${minecraft_version}:${paucal_version}")
     implementation ("at.petra-k.hexcasting:hexcasting-forge-${minecraft_version}:${hexcasting_version}")
+    modApi("cn.xm1221.MieLib:mielib-forge:${rootProject.mielib_version}") { transitive = false }
+    include("cn.xm1221.MieLib:mielib-forge:${rootProject.mielib_version}")
 
     common(project(path: ':common', configuration: 'namedElements')) { transitive false }
     shadowBundle project(path: ':common', configuration: 'transformProductionForge')
@@ -69,6 +72,31 @@ shadowJar {
 
 remapJar {
     input.set shadowJar.archiveFile
+}
+
+publishMods {
+    def isCI = (System.getenv("CI") ?: "").trim().length() > 0
+    def isDryRun = (System.getenv("DRY_RUN") ?: "").trim().length() > 0
+    dryRun = !isCI || isDryRun
+
+    file = remapJar.archiveFile
+    modLoaders.add("forge")
+    type = STABLE
+    displayName = "Almightly Staff ${project.version} [Forge]"
+    changelog = rootProject.publishMods.changelog
+
+    modrinth {
+        accessToken = System.getenv("MODRINTH_TOKEN") ?: ""
+        projectId = rootProject.modrinth_id
+        minecraftVersions.add(rootProject.minecraft_version)
+        requires("architectury-api")
+        requires("hex-casting")
+        requires("cloth-config")
+    }
+
+    github {
+        parent(rootProject.tasks.named("publishGithub"))
+    }
 }
 
 /*mixin {

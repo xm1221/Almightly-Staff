@@ -7,13 +7,13 @@ import at.petrak.hexcasting.api.casting.math.HexCoord;
 import at.petrak.hexcasting.api.casting.math.HexPattern;
 import at.petrak.hexcasting.client.gui.GuiSpellcasting;
 import at.petrak.hexcasting.common.lib.HexSounds;
-import cn.xm1221.AlmightlyStaff.gui.IdeSpellcastingAccess;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.Bounds;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeComponent;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeScissor;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeTheme;
 import cn.xm1221.AlmightlyStaff.gui.ide.model.IdeSession;
 import cn.xm1221.AlmightlyStaff.spell.StaffHex;
+import cn.xm1221.MieLib.client.SpellcastingGuiAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -73,20 +73,21 @@ public final class HexGridPanel implements IdeComponent {
         spellcasting = new GuiSpellcasting(InteractionHand.MAIN_HAND, patterns, List.of(), null, 0);
         spellcasting.init(mc, win.getGuiScaledWidth(), win.getGuiScaledHeight());
         stopSound();
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.setIdeWriteMode$ide(true);
-        ia.setCastCollectMode$ide(true);
-        ia.setHexSizeOverride$ide(hexSize);
-        ia.setOnDrawPattern$ide((pat, idx) -> onPatternDrawn(pat));
+        SpellcastingGuiAccess ia = SpellcastingGuiAccess.of(spellcasting);
+        ia.setSendPatternPackets(false);
+        ia.setKeepOpenOnStackClear(true);
+        ia.setHexSizeOverride(hexSize);
+        ia.setOnDrawPattern(this::onPatternDrawn);
         updateCenterOffset();
     }
 
     private void updateCenterOffset() {
         if (spellcasting == null) return;
         Bounds cb = canvasBounds();
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.setHexSizeOverride$ide(hexSize);
-        ia.setCoordsOffsetOverride$ide(new Vec2(cb.x() + cb.w() / 2.0f + panX, cb.y() + cb.h() / 2.0f + panY));
+        SpellcastingGuiAccess.of(spellcasting).setViewport(
+            hexSize,
+            new Vec2(cb.x() + cb.w() / 2.0f + panX, cb.y() + cb.h() / 2.0f + panY)
+        );
     }
 
     private void onPatternDrawn(HexPattern pat) {
@@ -94,21 +95,17 @@ public final class HexGridPanel implements IdeComponent {
         CompoundTag tag = IotaType.serialize(new PatternIota(pat));
         insertCallback.accept(List.of(tag));
         if (spellcasting != null) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            ia.clearPatterns$ide();
+            SpellcastingGuiAccess.of(spellcasting).clearPatterns();
         }
     }
 
     public boolean hasUnfinishedStroke() {
-        if (spellcasting == null) return false;
-        IdeSpellcastingAccess ia = as(spellcasting);
-        return ia.isDrawing$ide();
+        return spellcasting != null && SpellcastingGuiAccess.of(spellcasting).isStrokeActive();
     }
 
     public boolean cancelUnfinishedStroke() {
         if (!hasUnfinishedStroke()) return false;
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.cancelStroke$ide();
+        SpellcastingGuiAccess.of(spellcasting).cancelStroke();
         mouseHeld = false;
         return true;
     }
@@ -165,7 +162,7 @@ public final class HexGridPanel implements IdeComponent {
         Bounds cb = canvasBounds();
         if (cb.isEmpty()) return;
         try (IdeScissor.Scope sc = IdeScissor.push(g, cb)) {
-            g.fill(cb.x(), cb.y(), cb.right(), cb.bottom(), 0xFF101318);
+            g.fill(cb.x(), cb.y(), cb.right(), cb.bottom(), IdeTheme.BG_CANVAS);
             renderGridDots(g, cb);
             if (spellcasting != null) {
                 spellcasting.render(g, mouseX, mouseY, partialTick);
@@ -254,8 +251,7 @@ public final class HexGridPanel implements IdeComponent {
         String clr = Component.translatable("almightly_staff.gui.clear_pattern").getString();
         int clrW = font.width(clr) + 10;
         if (mx >= x && mx < x + clrW && spellcasting != null) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            ia.clearPatterns$ide();
+            SpellcastingGuiAccess.of(spellcasting).clearPatterns();
             return true;
         }
         return true;

@@ -1,5 +1,6 @@
 package cn.xm1221.AlmightlyStaff.gui.ide.layout;
 
+import cn.xm1221.AlmightlyStaff.client.AlmightlyStaffClientConfig;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.Bounds;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeComponent;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeScissor;
@@ -85,7 +86,8 @@ public final class FloatingWindow {
     }
 
     public Bounds bodyBounds() {
-        return bounds.inset(1, HEADER_HEIGHT, 1, 1);
+        int inset = IdeTheme.contentInset();
+        return bounds.inset(inset, HEADER_HEIGHT, inset, inset);
     }
 
     public boolean contains(double mx, double my) {
@@ -135,7 +137,13 @@ public final class FloatingWindow {
         g.fill(bounds.x() - 2, bounds.y() - 2, bounds.right() + 2, bounds.bottom() + 2, 0x77000000);
         IdeTheme.drawNineSlice(g, bounds, focused ? IdeTheme.NineSlice.FLOAT_ACTIVE : IdeTheme.NineSlice.FLOAT_INACTIVE);
 
-        Bounds header = new Bounds(bounds.x() + 1, bounds.y() + 1, Math.max(0, bounds.w() - 2), HEADER_HEIGHT - 1);
+        int inset = IdeTheme.borderThickness();
+        Bounds header = new Bounds(
+            bounds.x() + inset,
+            bounds.y() + inset,
+            Math.max(0, bounds.w() - inset * 2),
+            Math.max(1, HEADER_HEIGHT - inset)
+        );
         IdeTheme.drawNineSlice(g, header, IdeTheme.NineSlice.HEADER);
         if (focused) {
             g.fill(header.x(), header.y(), header.right(), header.y() + 2, IdeTheme.ACCENT);
@@ -178,9 +186,13 @@ public final class FloatingWindow {
         }
 
         if (!maximized) {
-            int rx = bounds.right() - 2, by = bounds.bottom() - 2;
+            int handleInset = Math.max(2, IdeTheme.contentInset() + 1);
+            int rx = bounds.right() - handleInset, by = bounds.bottom() - handleInset;
             g.fill(rx - 6, by, rx, by + 1, IdeTheme.TEXT_MUTED);
             g.fill(rx - 3, by - 3, rx, by - 2, IdeTheme.TEXT_MUTED);
+        }
+        if (IdeTheme.borderThickness() > 1) {
+            IdeTheme.drawBorder(g, bounds, focused ? IdeTheme.ACCENT : IdeTheme.BORDER_STRONG);
         }
         if (!showTitle && icon != null && mouseX >= header.x() + 2 && mouseX < header.x() + 18
             && mouseY >= header.y() && mouseY < header.bottom()) {
@@ -245,26 +257,18 @@ public final class FloatingWindow {
 
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy,
                                 Bounds workArea, java.util.List<FloatingWindow> others) {
+        int snap = AlmightlyStaffClientConfig.get().windowSnapDistance();
         if (dragMode == 1) {
             int nx = dragStartBounds.x() + (int) Math.round(mx - dragStartX);
             int ny = dragStartBounds.y() + (int) Math.round(my - dragStartY);
             int w = dragStartBounds.w();
             int h = dragStartBounds.h();
-            // 贴边吸附（工作区边缘与其它浮窗边缘）
-            final int snap = 8;
-            if (Math.abs(nx - workArea.x()) <= snap) nx = workArea.x();
-            if (Math.abs((nx + w) - workArea.right()) <= snap) nx = workArea.right() - w;
-            if (Math.abs(ny - workArea.y()) <= snap) ny = workArea.y();
-            if (Math.abs((ny + h) - workArea.bottom()) <= snap) ny = workArea.bottom() - h;
+            java.util.List<Bounds> otherBounds = new java.util.ArrayList<>();
             for (FloatingWindow o : others) {
-                if (o == this) continue;
-                Bounds ob = o.bounds();
-                if (Math.abs(nx - ob.right()) <= snap) nx = ob.right();
-                if (Math.abs((nx + w) - ob.x()) <= snap) nx = ob.x() - w;
-                if (Math.abs(ny - ob.bottom()) <= snap) ny = ob.bottom();
-                if (Math.abs((ny + h) - ob.y()) <= snap) ny = ob.y() - h;
+                if (o != this) otherBounds.add(o.bounds());
             }
-            setBounds(new Bounds(nx, ny, w, h), Math.max(workArea.right(), w + 16), Math.max(workArea.bottom(), h + 40), workArea.y());
+            Bounds snapped = snapMoveBounds(nx, ny, w, h, workArea, otherBounds, snap);
+            setBounds(snapped, Math.max(workArea.right(), w + 16), Math.max(workArea.bottom(), h + 40), workArea.y());
             return true;
         }
         if (dragMode > 1) {
@@ -274,14 +278,105 @@ public final class FloatingWindow {
             int y1 = dragStartBounds.y();
             int x2 = dragStartBounds.right();
             int y2 = dragStartBounds.bottom();
-            if ((dragMode & 2) != 0) x1 = Math.min(x2 - minW, x1 + ddx);
-            if ((dragMode & 4) != 0) x2 = Math.max(x1 + minW, x2 + ddx);
-            if ((dragMode & 8) != 0) y1 = Math.max(workArea.y(), Math.min(y2 - minH, y1 + ddy));
-            if ((dragMode & 16) != 0) y2 = Math.max(y1 + minH, y2 + ddy);
+            java.util.List<Bounds> otherBounds = new java.util.ArrayList<>();
+            for (FloatingWindow o : others) {
+                if (o != this) otherBounds.add(o.bounds());
+            }
+            if ((dragMode & 2) != 0) {
+                int raw = Math.min(x2 - minW, x1 + ddx);
+                x1 = Math.min(x2 - minW, snapEdge(raw, snap, collectVerticalEdges(workArea, otherBounds)));
+            }
+            if ((dragMode & 4) != 0) {
+                int raw = Math.max(x1 + minW, x2 + ddx);
+                x2 = Math.max(x1 + minW, snapEdge(raw, snap, collectVerticalEdges(workArea, otherBounds)));
+            }
+            if ((dragMode & 8) != 0) {
+                int raw = Math.max(workArea.y(), Math.min(y2 - minH, y1 + ddy));
+                y1 = Math.max(workArea.y(), Math.min(y2 - minH, snapEdge(raw, snap, collectHorizontalEdges(workArea, otherBounds))));
+            }
+            if ((dragMode & 16) != 0) {
+                int raw = Math.max(y1 + minH, y2 + ddy);
+                y2 = Math.max(y1 + minH, snapEdge(raw, snap, collectHorizontalEdges(workArea, otherBounds)));
+            }
             setBounds(new Bounds(x1, y1, x2 - x1, y2 - y1), workArea.right(), workArea.bottom(), workArea.y());
             return true;
         }
         return content.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    /** 贴边吸附（工作区边缘与其它浮窗边缘），返回吸附后的窗口矩形。 */
+    public static Bounds snapMoveBounds(int nx, int ny, int w, int h, Bounds workArea,
+                                        java.util.List<Bounds> others, int snapDistance) {
+        if (snapDistance <= 0) {
+            return new Bounds(nx, ny, w, h);
+        }
+        int[] vEdges = collectVerticalEdges(workArea, others);
+        int[] hEdges = collectHorizontalEdges(workArea, others);
+        int snappedX = snapSpan(nx, w, snapDistance, vEdges);
+        int snappedY = snapSpan(ny, h, snapDistance, hEdges);
+        return new Bounds(snappedX, snappedY, w, h);
+    }
+
+    private static int[] collectVerticalEdges(Bounds workArea, java.util.List<Bounds> others) {
+        int count = 2 + (others != null ? others.size() * 2 : 0);
+        int[] out = new int[count];
+        int i = 0;
+        out[i++] = workArea.x();
+        out[i++] = workArea.right();
+        if (others != null) {
+            for (Bounds ob : others) {
+                out[i++] = ob.x();
+                out[i++] = ob.right();
+            }
+        }
+        return out;
+    }
+
+    private static int[] collectHorizontalEdges(Bounds workArea, java.util.List<Bounds> others) {
+        int count = 2 + (others != null ? others.size() * 2 : 0);
+        int[] out = new int[count];
+        int i = 0;
+        out[i++] = workArea.y();
+        out[i++] = workArea.bottom();
+        if (others != null) {
+            for (Bounds ob : others) {
+                out[i++] = ob.y();
+                out[i++] = ob.bottom();
+            }
+        }
+        return out;
+    }
+
+    private static int snapSpan(int start, int size, int snap, int[] targets) {
+        int bestDelta = snap + 1;
+        int result = start;
+        for (int t : targets) {
+            int dStart = Math.abs(start - t);
+            if (dStart < bestDelta) {
+                bestDelta = dStart;
+                result = t;
+            }
+            int dEnd = Math.abs((start + size) - t);
+            if (dEnd < bestDelta) {
+                bestDelta = dEnd;
+                result = t - size;
+            }
+        }
+        return result;
+    }
+
+    private static int snapEdge(int pos, int snap, int[] targets) {
+        if (snap <= 0) return pos;
+        int bestDist = snap + 1;
+        int result = pos;
+        for (int t : targets) {
+            int d = Math.abs(pos - t);
+            if (d < bestDist) {
+                bestDist = d;
+                result = t;
+            }
+        }
+        return result;
     }
 
     public boolean mouseReleased(double mx, double my, int button) {

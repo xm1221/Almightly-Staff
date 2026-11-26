@@ -1,9 +1,9 @@
 plugins {
     id 'dev.architectury.loom' version '1.11-SNAPSHOT' apply false
     id 'architectury-plugin' version '3.4-SNAPSHOT'
-    id 'com.github.johnrengelman.shadow' version "8.1.1"
-    id "org.jetbrains.kotlin.jvm" version "2.2.20"
-
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'org.jetbrains.kotlin.jvm' version '2.2.20'
+    id 'me.modmuss50.mod-publish-plugin' version '1.0.0'
 }
 
 apply plugin: "org.jetbrains.kotlin.jvm"
@@ -17,6 +17,30 @@ allprojects {
     version = rootProject.mod_version
 }
 
+publishMods {
+    def isCI = (System.getenv("CI") ?: "").trim().length() > 0
+    def isDryRun = (System.getenv("DRY_RUN") ?: "").trim().length() > 0
+    dryRun = !isCI || isDryRun
+
+    type = STABLE
+    displayName = "v${project.version}"
+    changelog = provider {
+        def lines = rootProject.file("CHANGELOG.md").readLines("UTF-8")
+        def afterHeader = lines.dropWhile { !it.startsWith("## ") }.drop(1)
+        afterHeader.takeWhile { !it.startsWith("## ") }
+            .collect { it.replaceFirst(/^### /, "## ") }
+            .join("\n")
+            .trim()
+    }
+
+    github {
+        accessToken = System.getenv("GITHUB_TOKEN") ?: ""
+        repository = System.getenv("GITHUB_REPOSITORY") ?: ""
+        commitish = System.getenv("GITHUB_SHA") ?: ""
+        allowEmptyFiles = true
+    }
+}
+
 subprojects {
     apply plugin: 'dev.architectury.loom'
     apply plugin: 'architectury-plugin'
@@ -28,33 +52,14 @@ subprojects {
     }
 
     repositories {
-        // Add repositories to retrieve artifacts from in here.
-        // You should only use this when depending on other mods because
-        // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-        // See https://docs.gradle.org/current/userguide/declaring_repositories.html
-        // for more information about repositories.
-        maven { url = "https://maven.aliyun.com/repository/gradle-plugin" }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven{ url= uri("https://mvnrepository.com/artifact/") }
-        maven{ url =uri("https://mirrors.qlu.edu.cn/bmclapi") }
-        maven{url= uri("https://mirror.sjtu.edu.cn/")}
-        maven{url=uri("https://central.sonatype.com/artifact/")}
-        //maven { url = 'https://maven.aliyun.com/repository/public' }
+        mavenCentral()
         maven {
             name = "Modrinth"
             url = "https://api.modrinth.com/maven"
         }
-        mavenCentral()
-        maven {
-            url "https://maven.blamejared.com"
-        }
-        maven {
-            url "https://cursemaven.com"
-            content {
-                includeGroup "curse.maven"
-            }
-        }
-        maven { url = "https://api.modrinth.com/maven" }
+        maven { url = "https://maven.fabricmc.net/" }
+        maven { url = "https://maven.minecraftforge.net/" }
+        maven { url = "https://maven.architectury.dev/" }
         maven { url = "https://maven.hexxy.media" }
         maven { url = "https://maven.blamejared.com/" }
         maven { url = "https://maven.jamieswhiteshirt.com/libs-release/" }
@@ -62,8 +67,28 @@ subprojects {
         maven { url = "https://maven.shedaniel.me/" }
         maven { url = "https://maven.terraformersmc.com/releases" }
         maven { url = "https://maven.ladysnake.org/releases" }
+        maven { url = "https://maven.theillusivec4.top" }
         maven { url = "https://mvn.devos.one/snapshots/" }
-        maven { url = 'https://maven.aliyun.com/repository/public' }
+        maven {
+            url = "https://cursemaven.com"
+            content {
+                includeGroup "curse.maven"
+            }
+        }
+        exclusiveContent {
+            filter {
+                includeGroup "cn.xm1221.MieLib"
+            }
+            forRepository {
+                mavenLocal()
+            }
+            forRepository {
+                maven {
+                    name = "xm1221Maven"
+                    url = "https://xm1221.github.io/maven"
+                }
+            }
+        }
         flatDir { dir "libs/" }
     }
 
@@ -74,14 +99,9 @@ subprojects {
 
         modImplementation("at.petra-k.hexcasting:hexcasting-common-${project.minecraft_version}:${project.hexcasting_version}") { transitive = false }
         modImplementation "curse.maven:hexparse-1148731:7676910"
-        //implementation fileTree(dir: "libs", include: '*.jar')
-
     }
 
     java {
-        // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-        // if it is present.
-        // If you remove this line, sources will not be generated.
         withSourcesJar()
 
         sourceCompatibility = JavaVersion.VERSION_17
@@ -89,7 +109,14 @@ subprojects {
     }
 
     tasks.withType(JavaCompile).configureEach {
+        it.options.encoding = "UTF-8"
         it.options.release = 17
+    }
+
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = "UTF-8"
+        options.charSet = "UTF-8"
+        options.docEncoding = "UTF-8"
     }
 
     // Configure Maven publishing.
@@ -101,12 +128,7 @@ subprojects {
             }
         }
 
-        // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
         repositories {
-            // Add repositories to publish to here.
-            // Notice: This block does NOT have the same function as the block in the top level.
-            // The repositories here will be used for publishing your artifact, not for
-            // retrieving dependencies.
         }
     }
 }

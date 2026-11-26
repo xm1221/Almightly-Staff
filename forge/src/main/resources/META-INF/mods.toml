@@ -42,6 +42,13 @@ ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies.almightly_staff]]
+modId = "mielib"
+mandatory = true
+versionRange = "[0.0.3,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.almightly_staff]]
 modId = "hexparse"
 mandatory = false
 versionRange = "[0.0.0,)"

@@ -398,20 +398,20 @@ public final class IotaTextEditorView implements IdeComponent {
                 boolean sel = st.selectedIndices.contains(tok.index());
                 boolean hov = tok.index() == hoverToken;
                 if (sel) {
-                    g.fill(rx - 1, ry + 1, rx + tok.dispW() + 1, ry + tok.h() - 1, 0x33FFAA00);
+                    g.fill(rx - 1, ry + 1, rx + tok.dispW() + 1, ry + tok.h() - 1, IdeTheme.GOLD_SEAL_FILL);
                 } else if (hov) {
-                    g.fill(rx - 1, ry + 1, rx + tok.dispW() + 1, ry + tok.h() - 1, 0x44303744);
+                    g.fill(rx - 1, ry + 1, rx + tok.dispW() + 1, ry + tok.h() - 1, IdeTheme.BG_HOVER);
                 }
 
                 Component disp = IotaType.getDisplay(doc.iotasView().get(tok.index()));
                 if (sel) {
-                    g.drawString(font, recolorComponent(disp, 0xFFAA00), rx, ry + 3, 0xFFFFAA00, false);
+                    g.drawString(font, recolorComponent(disp, IdeTheme.GOLD_SEAL & 0xFFFFFF), rx, ry + 3, IdeTheme.GOLD_SEAL, false);
                 } else {
-                    g.drawString(font, disp, rx, ry + 3, 0xFFFFFFFF, false);
+                    g.drawString(font, disp, rx, ry + 3, IdeTheme.TEXT_MAIN, false);
                 }
 
                 if (tok.hasComma()) {
-                    g.drawString(font, ", ", rx + tok.dispW(), ry + 3, sel ? 0xFFFFAA00 : 0xFFCCCCCC, false);
+                    g.drawString(font, ", ", rx + tok.dispW(), ry + 3, sel ? IdeTheme.GOLD_SEAL : IdeTheme.TEXT_MUTED, false);
                 }
             }
 

@@ -178,11 +178,11 @@ public final class PatternCatalogPanel implements IdeComponent {
                 int y = lb.y() + i * ROW_H;
                 boolean sel = idx == selectedIndex;
                 boolean hov = mouseX >= lb.x() && mouseX < contentRight && mouseY >= y && mouseY < y + ROW_H;
-                int fill = sel ? 0xAA315E5B : hov ? IdeTheme.BG_HOVER : (i % 2 == 0 ? IdeTheme.BG_ROW_EVEN : IdeTheme.BG_ROW_ODD);
+                int fill = sel ? IdeTheme.SELECTION_FILL : hov ? IdeTheme.BG_HOVER : (i % 2 == 0 ? IdeTheme.BG_ROW_EVEN : IdeTheme.BG_ROW_ODD);
                 g.fill(lb.x() + 2, y, contentRight - 1, y + ROW_H - 1, fill);
                 PatternCatalogEntry entry = filtered.get(idx);
                 int textCol = entry.kind() == PatternCatalogEntry.Kind.PER_WORLD ? IdeTheme.GOLD_SEAL_TEXT
-                    : (sel ? 0xFFD7FFED : IdeTheme.TEXT_MAIN);
+                    : (sel ? IdeTheme.TEXT_ON_CANVAS : IdeTheme.TEXT_MAIN);
                 IdeTheme.drawClippedString(g, font, entry.displayName(), lb.x() + 6, y + 5,
                     Math.max(10, contentRight - lb.x() - 10), textCol);
             }
@@ -201,8 +201,8 @@ public final class PatternCatalogPanel implements IdeComponent {
                 int x = (int) dragMouseX;
                 int y = (int) dragMouseY;
                 String name = filtered.get(dragIndex).displayName().getString();
-                g.fill(x - 2, y - 2, x + 76, y + 16, 0xCC315E5B);
-                g.drawString(font, IdeTheme.trimText(font, name, 70), x + 2, y + 3, 0xFFFFFFFF, false);
+                g.fill(x - 2, y - 2, x + 76, y + 16, IdeTheme.SELECTION_FILL);
+                g.drawString(font, IdeTheme.trimText(font, name, 70), x + 2, y + 3, IdeTheme.TEXT_ON_CANVAS, false);
             } finally {
                 ps.popPose();
             }
@@ -243,9 +243,9 @@ public final class PatternCatalogPanel implements IdeComponent {
             }
             int textX = tx + previewSize + 12;
             int textY = ty + 6;
-            for (var c : nameLines) { g.drawString(font, c, textX, textY, 0xFFFFFFFF, false); textY += lineH; }
-            for (var c : sumLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0, false); textY += lineH; }
-            for (var c : descLines) { g.drawString(font, c, textX, textY, 0xFF9DA6B0, false); textY += lineH; }
+            for (var c : nameLines) { g.drawString(font, c, textX, textY, IdeTheme.TEXT_MAIN, false); textY += lineH; }
+            for (var c : sumLines) { g.drawString(font, c, textX, textY, IdeTheme.TEXT_MUTED, false); textY += lineH; }
+            for (var c : descLines) { g.drawString(font, c, textX, textY, IdeTheme.TEXT_MUTED, false); textY += lineH; }
         } finally {
             ps.popPose();
         }

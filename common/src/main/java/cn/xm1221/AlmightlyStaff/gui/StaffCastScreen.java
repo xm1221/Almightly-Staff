@@ -5,6 +5,7 @@ import at.petrak.hexcasting.api.casting.eval.ResolvedPattern;
 import at.petrak.hexcasting.client.gui.GuiSpellcasting;
 import at.petrak.hexcasting.common.lib.HexSounds;
 import cn.xm1221.AlmightlyStaff.network.ModNetworking;
+import cn.xm1221.MieLib.client.SpellcastingGuiAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -23,9 +24,6 @@ import java.util.function.Consumer;
  * 打开时先清空服务端施法栈，退出时把栈内元素全部交给回调（法术库追加到序列末尾）。
  */
 public class StaffCastScreen extends Screen {
-    @SuppressWarnings("unchecked")
-    private static <X> X as(Object o) { return (X) o; }
-
     private final Screen parent;
     private final Consumer<List<CompoundTag>> onExit;
     private final List<ResolvedPattern> patterns = new ArrayList<>();
@@ -44,20 +42,15 @@ public class StaffCastScreen extends Screen {
     protected void init() {
         spellcasting = new GuiSpellcasting(InteractionHand.MAIN_HAND, patterns, List.of(), null, 0);
         spellcasting.init(minecraft, width, height);
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.setIdeWriteMode$ide(false); // 真实施法：放行封包给服务器执行
-        ia.setCastCollectMode$ide(true); // 不自动关屏（isStackClear 时由 onServerUpdate 清显示）
-        ia.setStackClear$ide(); // 客户端同步清空栈显示（服务端清栈已由 openCastScreen 在打开前发包完成）
+        SpellcastingGuiAccess ia = SpellcastingGuiAccess.of(spellcasting);
+        ia.setSendPatternPackets(true); // 真实施法：放行封包给服务器执行
+        ia.setKeepOpenOnStackClear(true); // 不自动关屏（isStackClear 时由 onServerUpdate 清显示）
+        ia.clearStackDisplay(); // 客户端同步清空栈显示（服务端清栈已由 openCastScreen 在打开前发包完成）
     }
 
     /** 服务端施法回包：更新栈显示；isStackClear 时只清显示、不关屏（原版此处会 setScreen(null)）。 */
     public void onServerUpdate(ExecutionClientView info, int index) {
         if (spellcasting == null) return;
-        if (info.isStackClear()) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            ia.setStackClear$ide();
-            return;
-        }
         spellcasting.recvServerUpdate(info, index);
     }
 
@@ -142,8 +135,7 @@ public class StaffCastScreen extends Screen {
         // 退出时采集本地施法栈（显示在侧栏的那份，随服务端回包实时更新）
         List<CompoundTag> collected = new ArrayList<>();
         if (spellcasting != null) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            List<CompoundTag> stack = ia.getStack$ide();
+            List<CompoundTag> stack = SpellcastingGuiAccess.of(spellcasting).getCachedStack();
             if (stack != null) for (CompoundTag t : stack) if (t != null) collected.add(t.copy());
         }
         if (minecraft != null) minecraft.setScreen(parent);

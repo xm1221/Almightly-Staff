@@ -5,6 +5,8 @@ import at.petrak.hexcasting.api.casting.iota.IotaType;
 import at.petrak.hexcasting.api.casting.iota.PatternIota;
 import cn.xm1221.AlmightlyStaff.AlmightlyStaffConfig;
 import cn.xm1221.AlmightlyStaff.api.AlmightlyStaffIdeApi;
+import cn.xm1221.AlmightlyStaff.client.AlmightlyStaffClientConfig;
+import cn.xm1221.AlmightlyStaff.client.StaffClientConfigScreen;
 import cn.xm1221.AlmightlyStaff.gui.StaffDrawScreen;
 import cn.xm1221.AlmightlyStaff.gui.StaffLibScreen;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.Bounds;
@@ -95,6 +97,7 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
 
     public StaffIdeScreen() {
         super(Component.translatable("almightly_staff.ide.title"));
+        IdeTheme.applyConfig(AlmightlyStaffClientConfig.get());
         this.session.addListener(this);
 
         this.dockWorkspace = new DockWorkspace(windowManager, this::persistLayoutState, this::onDynamicWindowClosed);
@@ -213,6 +216,10 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
             ));
         }
         items.add(new ContextMenuOverlay.MenuItem(
+            Component.translatable("almightly_staff.ide.client_settings"), true,
+            this::openClientSettings
+        ));
+        items.add(new ContextMenuOverlay.MenuItem(
             Component.translatable("almightly_staff.ide.btn_reset_layout"), true,
             this::resetLayout
         ));
@@ -221,6 +228,12 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
             this::switchToLegacyUi
         ));
         contextMenu.open(Math.max(4, width - 150), TopSearchBar.HEIGHT + 2, width, height, font, items);
+    }
+
+    private void openClientSettings() {
+        if (minecraft != null) {
+            minecraft.setScreen(new StaffClientConfigScreen(this));
+        }
     }
 
     private void switchToLegacyUi() {
@@ -509,6 +522,9 @@ public final class StaffIdeScreen extends Screen implements StaffSyncReceiver, I
         searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:reset",
             Component.translatable("almightly_staff.ide.btn_reset_layout").getString(), "Reset Layout",
             "reset layout 重置布局", 0, "", "", "", this::resetLayout));
+        searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:settings",
+            Component.translatable("almightly_staff.ide.client_settings").getString(), "Settings",
+            "settings config theme snap border 设置 配置 主题 吸附 边框", 0, "", "", "", this::openClientSettings));
         searchIndex.add(new SearchIndex.Entry(SearchIndex.Kind.COMMAND, "cmd:legacy",
             Component.translatable("almightly_staff.ide.switch_legacy").getString(), "Legacy UI",
             "legacy classic 经典界面", 0, "", "", "", this::switchToLegacyUi));

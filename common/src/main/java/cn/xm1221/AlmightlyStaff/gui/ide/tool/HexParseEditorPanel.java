@@ -474,7 +474,7 @@ public final class HexParseEditorPanel implements IdeComponent, IdeSession.Liste
                     g.fill(px + 1, iy, px + popW - 1, iy + 14, IdeTheme.BG_ACTIVE);
                 }
                 g.drawString(font, IdeTheme.trimText(font, completions.get(i).displayLabel(), popW - 10),
-                    px + 5, iy + 3, sel ? 0xFFFFFFFF : IdeTheme.TEXT_MAIN, false);
+                    px + 5, iy + 3, sel ? IdeTheme.TEXT_ON_CANVAS : IdeTheme.TEXT_MAIN, false);
             }
         } finally {
             ps.popPose();

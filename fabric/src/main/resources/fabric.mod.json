@@ -19,6 +19,9 @@
     ],
     "client": [
       "cn.xm1221.AlmightlyStaff.fabric.client.AlmightlyStaffModFabricClient"
+    ],
+    "modmenu": [
+      "cn.xm1221.AlmightlyStaff.fabric.client.AlmightlyStaffModMenuIntegration"
     ]
   },
   "mixins": [
@@ -30,7 +33,8 @@
     "java": ">=17",
     "architectury": ">=9.2.14",
     "fabric-api": "*",
-    "hexcasting": "*"
+    "hexcasting": "*",
+    "mielib": ">=0.0.3"
   },
   "suggests": {
     "hexparse": "*"

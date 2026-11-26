@@ -305,7 +305,7 @@ public final class PageTreePanel implements IdeComponent {
             ps.translate(0.0F, 0.0F, 520.0F);
             try {
                 IdeTheme.drawNineSlice(g, (int) dragMouseX, (int) dragMouseY, 50, 15, IdeTheme.NineSlice.BTN_ACTIVE);
-                g.drawString(font, "#" + dragPageIndex, (int) dragMouseX + 5, (int) dragMouseY + 3, 0xFFFFFFFF, false);
+                g.drawString(font, "#" + dragPageIndex, (int) dragMouseX + 5, (int) dragMouseY + 3, IdeTheme.TEXT_MAIN, false);
             } finally {
                 ps.popPose();
             }

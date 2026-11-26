@@ -5,6 +5,7 @@ import at.petrak.hexcasting.client.gui.GuiSpellcasting;
 import at.petrak.hexcasting.common.lib.HexSounds;
 import cn.xm1221.AlmightlyStaff.spell.PatternRef;
 import cn.xm1221.AlmightlyStaff.spell.StaffHex;
+import cn.xm1221.MieLib.client.SpellcastingGuiAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,9 +22,6 @@ import java.util.function.Consumer;
  * 玩家绘制一个图案后自动关闭并回调该图案（写入对应格子）。
  */
 public class StaffDrawScreen extends Screen {
-    @SuppressWarnings("unchecked")
-    private static <X> X as(Object o) { return (X) o; }
-
     private final Screen parent;
     private final Consumer<PatternRef> callback;
     private final List<ResolvedPattern> patterns = new ArrayList<>();
@@ -43,9 +41,9 @@ public class StaffDrawScreen extends Screen {
     protected void init() {
         spellcasting = new GuiSpellcasting(InteractionHand.MAIN_HAND, patterns, List.of(), null, 0);
         spellcasting.init(minecraft, width, height);
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.setIdeWriteMode$ide(true); // 拦截封包，不发给服务器
-        ia.setOnDrawPattern$ide((pat, idx) -> {
+        SpellcastingGuiAccess ia = SpellcastingGuiAccess.of(spellcasting);
+        ia.setSendPatternPackets(false); // 拦截封包，不发给服务器
+        ia.setOnDrawPattern(pat -> {
             if (done) return;
             done = true;
             PatternRef ref = StaffHex.refFor(pat);

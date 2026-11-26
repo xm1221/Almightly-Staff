@@ -10,7 +10,7 @@ import net.minecraft.client.gui.GuiGraphics;
 public final class ToastOverlay {
     private String message = "";
     private int ticksRemaining;
-    private int accentColor = IdeTheme.ACCENT;
+    private int accentColor = 0;
 
     public void show(String msg) {
         show(msg, IdeTheme.ACCENT, 55);

@@ -175,10 +175,9 @@ public final class SequenceEditorView implements IdeComponent {
                         drawSlotFrame(g, x, y, selected, hover);
                         renderSlotIota(g, iotas.get(idx), x + 1, y + 1, SLOT_SIZE - 2);
                     } else if (!sealed) {
-                        int border = hover ? IdeTheme.ACCENT_LIGHT : 0xFF3A414A;
-                        g.fill(x, y, x + SLOT_SIZE, y + SLOT_SIZE, border);
-                        g.fill(x + 1, y + 1, x + SLOT_SIZE - 1, y + SLOT_SIZE - 1,
-                            hover ? 0xFF2C2C35 : 0xFF20252B);
+                        int border = hover ? IdeTheme.ACCENT_LIGHT : IdeTheme.BORDER;
+                        g.fill(x, y, x + SLOT_SIZE, y + SLOT_SIZE, IdeTheme.BG_ELEVATED);
+                        IdeTheme.drawBorder(g, x, y, SLOT_SIZE, SLOT_SIZE, border);
                         if (hover) {
                             g.drawCenteredString(font, "+", x + SLOT_SIZE / 2, y + SLOT_SIZE / 2 - 4, IdeTheme.ACCENT);
                         }
@@ -247,11 +246,10 @@ public final class SequenceEditorView implements IdeComponent {
     }
 
     private static void drawSlotFrame(GuiGraphics g, int x, int y, boolean selected, boolean hover) {
-        int border = selected ? 0xFFFFCA72 : hover ? IdeTheme.ACCENT_LIGHT : 0xFF4B535C;
-        int fill = selected ? 0xFF4E3D2C : hover ? 0xFF303039 : 0xFF20252B;
-        g.fill(x, y, x + SLOT_SIZE, y + SLOT_SIZE, border);
-        g.fill(x + 1, y + 1, x + SLOT_SIZE - 1, y + SLOT_SIZE - 1, fill);
-        g.fill(x + 2, y + 2, x + SLOT_SIZE - 2, y + 3, 0x553B424A);
+        int border = selected ? IdeTheme.GOLD_SEAL : hover ? IdeTheme.ACCENT_LIGHT : IdeTheme.BORDER_STRONG;
+        int fill = selected ? IdeTheme.BG_ACTIVE : hover ? IdeTheme.BG_HOVER : IdeTheme.BG_PANEL;
+        g.fill(x, y, x + SLOT_SIZE, y + SLOT_SIZE, fill);
+        IdeTheme.drawBorder(g, x, y, SLOT_SIZE, SLOT_SIZE, border);
     }
 
     public static void renderSlotIota(GuiGraphics g, CompoundTag tag, int x, int y, int size) {

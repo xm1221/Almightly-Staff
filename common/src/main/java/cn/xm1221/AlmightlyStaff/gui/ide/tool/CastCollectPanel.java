@@ -6,12 +6,12 @@ import at.petrak.hexcasting.api.casting.iota.IotaType;
 import at.petrak.hexcasting.api.casting.math.HexCoord;
 import at.petrak.hexcasting.client.gui.GuiSpellcasting;
 import at.petrak.hexcasting.common.lib.HexSounds;
-import cn.xm1221.AlmightlyStaff.gui.IdeSpellcastingAccess;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.Bounds;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeComponent;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeScissor;
 import cn.xm1221.AlmightlyStaff.gui.ide.core.IdeTheme;
 import cn.xm1221.AlmightlyStaff.gui.ide.model.IdeSession;
+import cn.xm1221.MieLib.client.SpellcastingGuiAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -75,9 +75,9 @@ public final class CastCollectPanel implements IdeComponent {
     public void beginFreshSession() {
         ensureInitialized();
         if (spellcasting != null) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            ia.clearPatterns$ide();
-            ia.setStackClear$ide();
+            SpellcastingGuiAccess ia = SpellcastingGuiAccess.of(spellcasting);
+            ia.clearPatterns();
+            ia.clearStackDisplay();
         }
         session.network().clearCastStack();
         stackScroll = 0;
@@ -90,19 +90,20 @@ public final class CastCollectPanel implements IdeComponent {
         spellcasting = new GuiSpellcasting(InteractionHand.MAIN_HAND, patterns, List.of(), null, 0);
         spellcasting.init(mc, win.getGuiScaledWidth(), win.getGuiScaledHeight());
         stopSound();
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.setIdeWriteMode$ide(false); // 放行发包：真实施法
-        ia.setCastCollectMode$ide(true);
-        ia.setStackClear$ide();
+        SpellcastingGuiAccess ia = SpellcastingGuiAccess.of(spellcasting);
+        ia.setSendPatternPackets(true); // 放行发包：真实施法
+        ia.setKeepOpenOnStackClear(true);
+        ia.clearStackDisplay();
         updateOffset();
     }
 
     private void updateOffset() {
         if (spellcasting == null) return;
         Bounds cb = canvasBounds();
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.setHexSizeOverride$ide(hexSize);
-        ia.setCoordsOffsetOverride$ide(new Vec2(cb.x() + cb.w() / 2.0f + panX, cb.y() + cb.h() / 2.0f + panY));
+        SpellcastingGuiAccess.of(spellcasting).setViewport(
+            hexSize,
+            new Vec2(cb.x() + cb.w() / 2.0f + panX, cb.y() + cb.h() / 2.0f + panY)
+        );
     }
 
     private void adjustZoom(float delta) {
@@ -111,26 +112,18 @@ public final class CastCollectPanel implements IdeComponent {
     }
 
     public boolean hasUnfinishedStroke() {
-        if (spellcasting == null) return false;
-        IdeSpellcastingAccess ia = as(spellcasting);
-        return ia.isDrawing$ide();
+        return spellcasting != null && SpellcastingGuiAccess.of(spellcasting).isStrokeActive();
     }
 
     public boolean cancelUnfinishedStroke() {
         if (!hasUnfinishedStroke()) return false;
-        IdeSpellcastingAccess ia = as(spellcasting);
-        ia.cancelStroke$ide();
+        SpellcastingGuiAccess.of(spellcasting).cancelStroke();
         mouseHeld = false;
         return true;
     }
 
     public void onServerUpdate(ExecutionClientView info, int index) {
         if (spellcasting == null) return;
-        if (info.isStackClear()) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            ia.setStackClear$ide();
-            return;
-        }
         spellcasting.recvServerUpdate(info, index);
     }
 
@@ -189,7 +182,7 @@ public final class CastCollectPanel implements IdeComponent {
         Bounds cb = canvasBounds();
         if (!cb.isEmpty()) {
             try (IdeScissor.Scope sc = IdeScissor.push(g, cb)) {
-                g.fill(cb.x(), cb.y(), cb.right(), cb.bottom(), 0xFF101318);
+                g.fill(cb.x(), cb.y(), cb.right(), cb.bottom(), IdeTheme.BG_CANVAS);
                 renderGridDots(g, cb);
                 if (spellcasting != null) {
                     spellcasting.render(g, mouseX, mouseY, partialTick);
@@ -201,9 +194,11 @@ public final class CastCollectPanel implements IdeComponent {
         Bounds sb = stackBounds();
         if (!sb.isEmpty() && spellcasting != null) {
             IdeTheme.drawNineSlice(g, sb, IdeTheme.NineSlice.PANEL);
-            g.fill(sb.x(), sb.y(), sb.x() + 1, sb.bottom(), IdeTheme.BORDER);
-            IdeSpellcastingAccess ia = as(spellcasting);
-            List<CompoundTag> stack = ia.getStack$ide();
+            int divT = Math.min(sb.w() / 2, IdeTheme.borderThickness());
+            if (divT > 0) {
+                g.fill(sb.x(), sb.y(), sb.x() + divT, sb.bottom(), IdeTheme.BORDER);
+            }
+            List<CompoundTag> stack = SpellcastingGuiAccess.of(spellcasting).getCachedStack();
             int headerH = 16;
             g.drawString(font, Component.translatable("almightly_staff.ide.stack_header", stack.size()),
                 sb.x() + 6, sb.y() + 4, IdeTheme.TEXT_MUTED, false);
@@ -305,8 +300,7 @@ public final class CastCollectPanel implements IdeComponent {
                 return true;
             }
             if (mx >= xs[2] && mx < xs[2] + xs[3] && spellcasting != null) {
-                IdeSpellcastingAccess ia = as(spellcasting);
-                List<CompoundTag> stack = ia.getStack$ide();
+                List<CompoundTag> stack = SpellcastingGuiAccess.of(spellcasting).getCachedStack();
                 if (!stack.isEmpty()) {
                     collectCallback.accept(stack);
                 }
@@ -382,8 +376,7 @@ public final class CastCollectPanel implements IdeComponent {
         if (!bounds.contains(mx, my)) return false;
         Bounds sb = stackBounds();
         if (sb.contains(mx, my) && spellcasting != null) {
-            IdeSpellcastingAccess ia = as(spellcasting);
-            int total = ia.getStack$ide().size();
+            int total = SpellcastingGuiAccess.of(spellcasting).getCachedStack().size();
             int visible = Math.max(1, (sb.h() - 18) / STACK_ROW_H);
             stackScroll = Mth.clamp(stackScroll - (int) Math.signum(delta), 0, Math.max(0, total - visible));
             return true;

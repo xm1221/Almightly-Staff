@@ -42,7 +42,10 @@ public final class AlmightlyStaffModForge {
         var modBus = getModEventBus(AlmightlyStaffMod.MOD_ID);
         var evBus = MinecraftForge.EVENT_BUS;
 
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> modBus.orElseThrow().register(AlmightlyStaffModForgeClient.class));
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> {
+            AlmightlyStaffModForgeClient.registerConfigScreen();
+            modBus.orElseThrow().register(AlmightlyStaffModForgeClient.class);
+        });
 
       modBus.orElseThrow().addListener((FMLCommonSetupEvent evt) ->
                 evt.enqueueWork(() -> {

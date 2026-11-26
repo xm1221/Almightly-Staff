@@ -379,10 +379,11 @@ public final class DockWorkspace {
         if (maximizedDockedWindowId != null && root.findLeafContainingWindow(maximizedDockedWindowId) == null) {
             maximizedDockedWindowId = null;
         }
+        int inset = IdeTheme.contentInset();
         if (maximizedDockedWindowId != null) {
             WindowDef def = registry.get(maximizedDockedWindowId);
             if (def != null && !dockBounds.isEmpty()) {
-                def.content().layout(dockBounds.inset(1, HEADER_H, 1, 1));
+                def.content().layout(dockBounds.inset(inset, HEADER_H, inset, inset));
             }
             return;
         }
@@ -394,7 +395,7 @@ public final class DockWorkspace {
             if (activeId == null) continue;
             WindowDef def = registry.get(activeId);
             if (def != null) {
-                def.content().layout(leaf.bounds().inset(1, HEADER_H, 1, 1));
+                def.content().layout(leaf.bounds().inset(inset, HEADER_H, inset, inset));
             }
         }
     }
@@ -527,11 +528,15 @@ public final class DockWorkspace {
         if (activeDef != null) {
             activeDef.content().render(g, mouseX, mouseY, partialTick);
         }
+        if (IdeTheme.borderThickness() > 1) {
+            IdeTheme.drawBorder(g, slotBounds, IdeTheme.BORDER);
+        }
     }
 
     private void renderSplitters(GuiGraphics g, int mx, int my) {
         List<DockNode.SplitNode> splits = new ArrayList<>();
         root.collectSplitters(splits);
+        int accentW = Math.max(1, IdeTheme.borderThickness());
         for (DockNode.SplitNode s : splits) {
             Bounds sb = s.splitterBounds();
             if (sb.isEmpty()) continue;
@@ -539,11 +544,13 @@ public final class DockWorkspace {
             g.fill(sb.x(), sb.y(), sb.right(), sb.bottom(), IdeTheme.BORDER);
             if (hot) {
                 if (s.axis() == DockNode.Axis.HORIZONTAL) {
-                    int cx = sb.x() + sb.w() / 2;
-                    g.fill(cx, sb.y(), cx + 1, sb.bottom(), IdeTheme.ACCENT);
+                    int w = Math.min(sb.w(), accentW);
+                    int cx = sb.x() + Math.max(0, (sb.w() - w) / 2);
+                    g.fill(cx, sb.y(), cx + w, sb.bottom(), IdeTheme.ACCENT);
                 } else {
-                    int cy = sb.y() + sb.h() / 2;
-                    g.fill(sb.x(), cy, sb.right(), cy + 1, IdeTheme.ACCENT);
+                    int h = Math.min(sb.h(), accentW);
+                    int cy = sb.y() + Math.max(0, (sb.h() - h) / 2);
+                    g.fill(sb.x(), cy, sb.right(), cy + h, IdeTheme.ACCENT);
                 }
             }
         }

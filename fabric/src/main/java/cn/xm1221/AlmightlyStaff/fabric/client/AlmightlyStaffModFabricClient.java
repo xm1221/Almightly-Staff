@@ -2,6 +2,7 @@ package cn.xm1221.AlmightlyStaff.fabric.client;
 
 import at.petrak.hexcasting.fabric.event.MouseScrollCallback;
 import at.petrak.hexcasting.fabric.network.FabricPacketHandler;
+import cn.xm1221.AlmightlyStaff.client.AlmightlyStaffClientConfig;
 import cn.xm1221.AlmightlyStaff.client.AlmightlyStaffKeybinds;
 import cn.xm1221.AlmightlyStaff.client.ShiftScrollListener;
 import net.fabricmc.api.ClientModInitializer;
@@ -10,6 +11,7 @@ public final class AlmightlyStaffModFabricClient implements ClientModInitializer
     @Override
     public void onInitializeClient() {
         // This entrypoint is suitable for setting up client-specific logic, such as rendering.
+        AlmightlyStaffClientConfig.load();
         FabricPacketHandler.initClient();
 
         // 注册鼠标滚轮事件（捕获 Shift+滚轮 翻页）
